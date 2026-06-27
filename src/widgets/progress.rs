@@ -20,7 +20,7 @@ use std::fs;
 use std::time::Instant;
 
 pub fn run(title: String, command: Vec<String>, logfile: Option<String>) -> Result<Response> {
-    let mut stdout = std::io::stdout();
+    let mut stdout = crate::tty::open()?;
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
     crossterm::execute!(stdout, crossterm::cursor::Hide)?;
@@ -212,10 +212,10 @@ fn draw_progress(
     } else {
         let chunks = Layout::default()
             .constraints([
-                Constraint::Length(3),  // gauge
-                Constraint::Length(1),  // stage label
-                Constraint::Length(1),  // toggle hint
-                Constraint::Min(1),     // recent output
+                Constraint::Length(3),
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Min(1),
             ])
             .split(inner);
 

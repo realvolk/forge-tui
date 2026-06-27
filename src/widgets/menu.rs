@@ -13,7 +13,6 @@ use ratatui::{
 };
 use serde_json::Value;
 use std::collections::HashMap;
-use std::io;
 
 struct Choice {
     label: String,
@@ -81,7 +80,7 @@ pub fn run(
         _ => vec![],
     };
 
-    let mut stdout = io::stdout();
+    let mut stdout = crate::tty::open()?;
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
     crossterm::execute!(stdout, crossterm::event::EnableMouseCapture)?;

@@ -10,7 +10,6 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, Wrap},
     Terminal, Frame,
 };
-use std::io;
 use std::fs;
 
 pub fn run(title: String, message: Option<String>, file: Option<String>) -> Result<Response> {
@@ -20,7 +19,7 @@ pub fn run(title: String, message: Option<String>, file: Option<String>) -> Resu
         message.unwrap_or_default()
     };
 
-    let mut stdout = io::stdout();
+    let mut stdout = crate::tty::open()?;
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
     crossterm::execute!(stdout, crossterm::event::EnableMouseCapture)?;

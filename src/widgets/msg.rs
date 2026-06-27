@@ -9,10 +9,9 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Terminal, Frame,
 };
-use std::io;
 
 pub fn run(title: String, message: String) -> Result<Response> {
-    let mut stdout = io::stdout();
+    let mut stdout = crate::tty::open()?;
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
     crossterm::execute!(stdout, crossterm::cursor::Hide)?;

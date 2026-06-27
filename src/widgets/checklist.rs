@@ -10,7 +10,6 @@ use ratatui::{
     Terminal, Frame,
 };
 use std::collections::HashSet;
-use std::io;
 
 pub fn run(
     title: String,
@@ -21,7 +20,7 @@ pub fn run(
     max: Option<usize>,
     default: Option<Vec<String>>,
 ) -> Result<Response> {
-    let mut stdout = io::stdout();
+    let mut stdout = crate::tty::open()?;
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
     crossterm::execute!(stdout, crossterm::event::EnableMouseCapture)?;

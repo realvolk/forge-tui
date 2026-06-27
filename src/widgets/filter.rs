@@ -9,7 +9,6 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
     Terminal, Frame,
 };
-use std::io;
 
 pub fn run(
     title: String,
@@ -17,7 +16,7 @@ pub fn run(
     choices: Vec<String>,
     placeholder: Option<String>,
 ) -> Result<Response> {
-    let mut stdout = io::stdout();
+    let mut stdout = crate::tty::open()?;
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
     crossterm::execute!(stdout, crossterm::cursor::Hide)?;
