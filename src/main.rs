@@ -40,7 +40,6 @@ fn main() -> Result<()> {
         process::exit(1);
     }
 
-    // Read JSON from --input file, or from stdin
     let input = if let Some(ref path) = input_file {
         fs::read_to_string(path)
             .map_err(|e| anyhow::anyhow!("Failed to read input file '{}': {}", path, e))?
@@ -53,43 +52,42 @@ fn main() -> Result<()> {
     };
 
     if input.is_empty() {
-        let resp = contract::Response {
+        eprintln!("{}", serde_json::to_string(&contract::Response {
             result: None,
             cancelled: true,
             error: Some("Empty input".into()),
-        };
-        println!("{}", serde_json::to_string(&resp)?);
+        })?);
         process::exit(1);
     }
 
     let request: contract::Request = match serde_json::from_str(&input) {
         Ok(r) => r,
         Err(e) => {
-            let resp = contract::Response {
+            eprintln!("{}", serde_json::to_string(&contract::Response {
                 result: None,
                 cancelled: true,
                 error: Some(format!("Invalid request JSON: {}", e)),
-            };
-            println!("{}", serde_json::to_string(&resp)?);
+            })?);
             process::exit(1);
         }
     };
 
     match widgets::dispatch(request) {
         Ok(response) => {
+            // ONLY JSON to stdout. Nothing else.
             let json = serde_json::to_string(&response)?;
             let mut stdout = io::stdout();
             stdout.write_all(json.as_bytes())?;
             stdout.write_all(b"\n")?;
+            stdout.flush()?;
             process::exit(if response.cancelled { 1 } else { 0 });
         }
         Err(e) => {
-            let resp = contract::Response {
+            eprintln!("{}", serde_json::to_string(&contract::Response {
                 result: None,
                 cancelled: true,
                 error: Some(format!("{}", e)),
-            };
-            println!("{}", serde_json::to_string(&resp)?);
+            })?);
             process::exit(1);
         }
     }
