@@ -1,4 +1,4 @@
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead};
 use std::fs;
 use std::process;
 use anyhow::Result;

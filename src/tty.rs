@@ -1,5 +1,6 @@
 use std::fs;
 use std::io;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 pub fn open() -> io::Result<fs::File> {
     fs::OpenOptions::new()
@@ -8,14 +9,14 @@ pub fn open() -> io::Result<fs::File> {
         .open("/dev/tty")
 }
 
-pub fn redirect_stdout() -> io::Result<std::os::unix::io::OwnedFd> {
+pub fn redirect_stdout() -> io::Result<OwnedFd> {
     let tty = open()?;
     let old = unsafe {
         let fd = libc::dup(1);
         if fd < 0 {
             return Err(io::Error::last_os_error());
         }
-        std::os::unix::io::OwnedFd::from_raw_fd(fd)
+        OwnedFd::from_raw_fd(fd)
     };
     let tty_fd = tty.as_raw_fd();
     if unsafe { libc::dup2(tty_fd, 1) } < 0 {
@@ -24,7 +25,7 @@ pub fn redirect_stdout() -> io::Result<std::os::unix::io::OwnedFd> {
     Ok(old)
 }
 
-pub fn restore_stdout(old: std::os::unix::io::OwnedFd) {
+pub fn restore_stdout(old: OwnedFd) {
     let old_fd = old.as_raw_fd();
     unsafe {
         libc::dup2(old_fd, 1);
