@@ -52,43 +52,46 @@ fn main() -> Result<()> {
     };
 
     if input.is_empty() {
-        eprintln!("{}", serde_json::to_string(&contract::Response {
+        write_response(&contract::Response {
             result: None,
             cancelled: true,
             error: Some("Empty input".into()),
-        })?);
+        });
         process::exit(1);
     }
 
     let request: contract::Request = match serde_json::from_str(&input) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("{}", serde_json::to_string(&contract::Response {
+            write_response(&contract::Response {
                 result: None,
                 cancelled: true,
                 error: Some(format!("Invalid request JSON: {}", e)),
-            })?);
+            });
             process::exit(1);
         }
     };
 
     match widgets::dispatch(request) {
         Ok(response) => {
-            // ONLY JSON to stdout. Nothing else.
-            let json = serde_json::to_string(&response)?;
-            let mut stdout = io::stdout();
-            stdout.write_all(json.as_bytes())?;
-            stdout.write_all(b"\n")?;
-            stdout.flush()?;
+            write_response(&response);
             process::exit(if response.cancelled { 1 } else { 0 });
         }
         Err(e) => {
-            eprintln!("{}", serde_json::to_string(&contract::Response {
+            write_response(&contract::Response {
                 result: None,
                 cancelled: true,
                 error: Some(format!("{}", e)),
-            })?);
+            });
             process::exit(1);
         }
     }
+}
+
+fn write_response(response: &contract::Response) {
+    let json = serde_json::to_string(response).unwrap_or_default();
+    let mut stderr = io::stderr();
+    let _ = stderr.write_all(json.as_bytes());
+    let _ = stderr.write_all(b"\n");
+    let _ = stderr.flush();
 }
