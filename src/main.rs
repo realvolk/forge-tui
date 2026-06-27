@@ -1,4 +1,4 @@
-use std::io::{self, BufRead, Read, Write};
+use std::io::{self, BufRead, Write};
 use std::fs;
 use std::process;
 use anyhow::Result;
@@ -40,6 +40,7 @@ fn main() -> Result<()> {
         process::exit(1);
     }
 
+    // Read JSON from --input file, or from stdin
     let input = if let Some(ref path) = input_file {
         fs::read_to_string(path)
             .map_err(|e| anyhow::anyhow!("Failed to read input file '{}': {}", path, e))?
@@ -77,7 +78,6 @@ fn main() -> Result<()> {
     match widgets::dispatch(request) {
         Ok(response) => {
             let json = serde_json::to_string(&response)?;
-            // Write response to stdout
             let mut stdout = io::stdout();
             stdout.write_all(json.as_bytes())?;
             stdout.write_all(b"\n")?;
