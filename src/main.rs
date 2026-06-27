@@ -11,10 +11,10 @@ mod widgets;
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    
+
     let mut mode: Option<String> = None;
     let mut input_file: Option<String> = None;
-    
+
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
