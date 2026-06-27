@@ -21,8 +21,6 @@ use std::time::Instant;
 use std::io;
 
 pub fn run(title: String, command: Vec<String>, logfile: Option<String>) -> Result<Response> {
-    let old_stdout = crate::tty::redirect_stdout()?;
-
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
     crossterm::execute!(io::stdout(), crossterm::cursor::Hide)?;
@@ -137,7 +135,6 @@ pub fn run(title: String, command: Vec<String>, logfile: Option<String>) -> Resu
                 output.push('\n');
             }
             progress = 100;
-            target_progress = 100;
             current_stage = String::from("Complete");
             terminal.draw(|f: &mut Frame| {
                 draw_progress(f, &title, &theme, &output, &current_stage, progress, show_raw);
@@ -154,8 +151,6 @@ pub fn run(title: String, command: Vec<String>, logfile: Option<String>) -> Resu
     crossterm::execute!(io::stdout(), crossterm::cursor::Show)?;
     crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
     crossterm::terminal::disable_raw_mode()?;
-
-    crate::tty::restore_stdout(old_stdout);
 
     Ok(Response {
         result: Some(serde_json::Value::String(output)),

@@ -20,8 +20,6 @@ pub fn run(title: String, message: Option<String>, file: Option<String>) -> Resu
         message.unwrap_or_default()
     };
 
-    let old_stdout = crate::tty::redirect_stdout()?;
-
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
     crossterm::execute!(io::stdout(), crossterm::event::EnableMouseCapture)?;
@@ -111,7 +109,5 @@ pub fn run(title: String, message: Option<String>, file: Option<String>) -> Resu
     crossterm::execute!(io::stdout(), crossterm::event::DisableMouseCapture)?;
     crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
     crossterm::terminal::disable_raw_mode()?;
-
-    crate::tty::restore_stdout(old_stdout);
     Ok(Response { result: None, cancelled: false, error: None })
 }

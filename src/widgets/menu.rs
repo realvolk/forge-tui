@@ -76,8 +76,6 @@ pub fn run(
     default: Option<String>,
     stability_colors: Option<HashMap<String, String>>,
 ) -> Result<Response> {
-    let old_stdout = crate::tty::redirect_stdout()?;
-
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
     crossterm::execute!(io::stdout(), crossterm::event::EnableMouseCapture)?;
@@ -285,8 +283,5 @@ pub fn run(
     crossterm::execute!(io::stdout(), crossterm::event::DisableMouseCapture)?;
     crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
     crossterm::terminal::disable_raw_mode()?;
-
-    crate::tty::restore_stdout(old_stdout);
-
     Ok(result)
 }

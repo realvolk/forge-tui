@@ -9,7 +9,7 @@ pub fn open() -> io::Result<fs::File> {
         .open("/dev/tty")
 }
 
-pub fn redirect_stdout() -> io::Result<OwnedFd> {
+pub fn redirect_stdout_to_tty() -> io::Result<OwnedFd> {
     let tty = open()?;
     let old = unsafe {
         let fd = libc::dup(1);
@@ -23,11 +23,4 @@ pub fn redirect_stdout() -> io::Result<OwnedFd> {
         return Err(io::Error::last_os_error());
     }
     Ok(old)
-}
-
-pub fn restore_stdout(old: OwnedFd) {
-    let old_fd = old.as_raw_fd();
-    unsafe {
-        libc::dup2(old_fd, 1);
-    }
 }
