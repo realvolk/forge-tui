@@ -13,6 +13,7 @@ use ratatui::{
 };
 use serde_json::Value;
 use std::collections::HashMap;
+use std::io;
 
 struct Choice {
     label: String,
@@ -75,21 +76,22 @@ pub fn run(
     default: Option<String>,
     stability_colors: Option<HashMap<String, String>>,
 ) -> Result<Response> {
+    let old_stdout = crate::tty::redirect_stdout()?;
+
+    crossterm::terminal::enable_raw_mode()?;
+    crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
+    crossterm::execute!(io::stdout(), crossterm::event::EnableMouseCapture)?;
+    crossterm::execute!(io::stdout(), crossterm::cursor::Hide)?;
+
+    let backend = CrosstermBackend::new(io::stdout());
+    let mut terminal = Terminal::new(backend)?;
+
+    let theme = Theme::load();
+
     let choices: Vec<Choice> = match &choices_json {
         Value::Array(arr) => arr.iter().map(Choice::from_value).collect(),
         _ => vec![],
     };
-
-    let mut stdout = crate::tty::open()?;
-    crossterm::terminal::enable_raw_mode()?;
-    crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
-    crossterm::execute!(stdout, crossterm::event::EnableMouseCapture)?;
-    crossterm::execute!(stdout, crossterm::cursor::Hide)?;
-
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-
-    let theme = Theme::load();
 
     let default_idx = default
         .as_ref()
@@ -279,9 +281,12 @@ pub fn run(
         }
     };
 
-    crossterm::execute!(terminal.backend_mut(), crossterm::cursor::Show)?;
-    crossterm::execute!(terminal.backend_mut(), crossterm::event::DisableMouseCapture)?;
-    crossterm::execute!(terminal.backend_mut(), crossterm::terminal::LeaveAlternateScreen)?;
+    crossterm::execute!(io::stdout(), crossterm::cursor::Show)?;
+    crossterm::execute!(io::stdout(), crossterm::event::DisableMouseCapture)?;
+    crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
     crossterm::terminal::disable_raw_mode()?;
+
+    crate::tty::restore_stdout(old_stdout);
+
     Ok(result)
 }

@@ -10,6 +10,7 @@ use ratatui::{
     Terminal, Frame,
 };
 use std::collections::HashSet;
+use std::io;
 
 pub fn run(
     title: String,
@@ -20,13 +21,14 @@ pub fn run(
     max: Option<usize>,
     default: Option<Vec<String>>,
 ) -> Result<Response> {
-    let mut stdout = crate::tty::open()?;
-    crossterm::terminal::enable_raw_mode()?;
-    crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
-    crossterm::execute!(stdout, crossterm::event::EnableMouseCapture)?;
-    crossterm::execute!(stdout, crossterm::cursor::Hide)?;
+    let old_stdout = crate::tty::redirect_stdout()?;
 
-    let backend = CrosstermBackend::new(stdout);
+    crossterm::terminal::enable_raw_mode()?;
+    crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
+    crossterm::execute!(io::stdout(), crossterm::event::EnableMouseCapture)?;
+    crossterm::execute!(io::stdout(), crossterm::cursor::Hide)?;
+
+    let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
 
     let theme = Theme::load();
@@ -161,9 +163,11 @@ pub fn run(
         }
     };
 
-    crossterm::execute!(terminal.backend_mut(), crossterm::cursor::Show)?;
-    crossterm::execute!(terminal.backend_mut(), crossterm::event::DisableMouseCapture)?;
-    crossterm::execute!(terminal.backend_mut(), crossterm::terminal::LeaveAlternateScreen)?;
+    crossterm::execute!(io::stdout(), crossterm::cursor::Show)?;
+    crossterm::execute!(io::stdout(), crossterm::event::DisableMouseCapture)?;
+    crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
     crossterm::terminal::disable_raw_mode()?;
+
+    crate::tty::restore_stdout(old_stdout);
     Ok(result)
 }

@@ -10,14 +10,16 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Terminal, Frame,
 };
+use std::io;
 
 pub fn run(title: String, message: String, default: Option<bool>) -> Result<Response> {
-    let mut stdout = crate::tty::open()?;
-    crossterm::terminal::enable_raw_mode()?;
-    crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
-    crossterm::execute!(stdout, crossterm::cursor::Hide)?;
+    let old_stdout = crate::tty::redirect_stdout()?;
 
-    let backend = CrosstermBackend::new(stdout);
+    crossterm::terminal::enable_raw_mode()?;
+    crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
+    crossterm::execute!(io::stdout(), crossterm::cursor::Hide)?;
+
+    let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
 
     let theme = Theme::load();
@@ -103,8 +105,10 @@ pub fn run(title: String, message: String, default: Option<bool>) -> Result<Resp
         }
     };
 
-    crossterm::execute!(terminal.backend_mut(), crossterm::cursor::Show)?;
-    crossterm::execute!(terminal.backend_mut(), crossterm::terminal::LeaveAlternateScreen)?;
+    crossterm::execute!(io::stdout(), crossterm::cursor::Show)?;
+    crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
     crossterm::terminal::disable_raw_mode()?;
+
+    crate::tty::restore_stdout(old_stdout);
     Ok(result)
 }
