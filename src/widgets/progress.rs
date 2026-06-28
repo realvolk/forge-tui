@@ -17,52 +17,42 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
 use std::fs;
-use std::time::Instant;
+use std::fs::File;
 use std::io;
+use std::time::Instant;
 
-pub fn run(title: String, command: Vec<String>, logfile: Option<String>) -> Result<Response> {
-    crossterm::terminal::enable_raw_mode()?;
-    crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
-    crossterm::execute!(io::stdout(), crossterm::cursor::Hide)?;
-
-    let backend = CrosstermBackend::new(io::stdout());
-    let mut terminal = Terminal::new(backend)?;
-
+pub fn run(
+    terminal: Option<&mut Terminal<CrosstermBackend<File>>>,
+    title: String,
+    command: Vec<String>,
+    logfile: Option<String>,
+) -> Result<Response> {
+    let is_daemon = terminal.is_some();
     let theme = Theme::load();
 
-    let (prog_name, args) = command.split_first()
-        .map(|(p, a)| (p.clone(), a.to_vec()))
-        .unwrap_or((String::new(), vec![]));
+    let mut owned_terminal;
+    let terminal = match terminal {
+        Some(t) => t,
+        None => {
+            let stdout = crate::tty::open()?;
+            crossterm::terminal::enable_raw_mode()?;
+            crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
+            crossterm::execute!(io::stdout(), crossterm::cursor::Hide)?;
+            owned_terminal = Terminal::new(CrosstermBackend::new(stdout))?;
+            &mut owned_terminal
+        }
+    };
 
-    let mut child = Command::new(&prog_name)
-        .args(&args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+    let (prog_name, args) = command.split_first().map(|(p, a)| (p.clone(), a.to_vec())).unwrap_or((String::new(), vec![]));
+    let mut child = Command::new(&prog_name).args(&args).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()
         .map_err(|e| anyhow::anyhow!("Failed to start '{}': {}", prog_name, e))?;
 
     let stdout_stream = child.stdout.take().unwrap();
     let stderr_stream = child.stderr.take().unwrap();
-
     let (tx, rx) = mpsc::channel::<String>();
     let tx2 = tx.clone();
-
-    thread::spawn(move || {
-        let reader = BufReader::new(stdout_stream);
-        for line in reader.lines() {
-            if let Ok(l) = line {
-                if tx.send(l).is_err() { break; }
-            }
-        }
-    });
-    thread::spawn(move || {
-        let reader = BufReader::new(stderr_stream);
-        for line in reader.lines() {
-            if let Ok(l) = line {
-                let _ = tx2.send(l);
-            }
-        }
-    });
+    thread::spawn(move || { for line in BufReader::new(stdout_stream).lines() { if let Ok(l) = line { if tx.send(l).is_err() { break; } } } });
+    thread::spawn(move || { for line in BufReader::new(stderr_stream).lines() { if let Ok(l) = line { let _ = tx2.send(l); } } });
 
     let mut output = String::new();
     let mut progress: u16 = 0;
@@ -86,14 +76,8 @@ pub fn run(title: String, command: Vec<String>, logfile: Option<String>) -> Resu
         if event::poll(std::time::Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
                 match key.code {
-                    KeyCode::Esc => {
-                        let _ = child.kill();
-                        cancelled = true;
-                        break;
-                    }
-                    KeyCode::Tab => {
-                        show_raw = !show_raw;
-                    }
+                    KeyCode::Esc => { let _ = child.kill(); cancelled = true; break; }
+                    KeyCode::Tab => show_raw = !show_raw,
                     _ => {}
                 }
             }
@@ -101,154 +85,57 @@ pub fn run(title: String, command: Vec<String>, logfile: Option<String>) -> Resu
 
         let mut had_output = false;
         while let Ok(line) = rx.try_recv() {
-            output.push_str(&line);
-            output.push('\n');
-            had_output = true;
-            last_activity = Instant::now();
-
-            for (marker, pct, label) in &stage_markers {
-                if line.contains(marker) {
-                    target_progress = target_progress.max(*pct);
-                    current_stage = label.to_string();
-                    break;
-                }
-            }
-
-            if let Some(ref log) = logfile {
-                let _ = fs::write(log, &output);
-            }
+            output.push_str(&line); output.push('\n'); had_output = true; last_activity = Instant::now();
+            for (marker, pct, label) in &stage_markers { if line.contains(marker) { target_progress = target_progress.max(*pct); current_stage = label.to_string(); break; } }
+            if let Some(ref log) = logfile { let _ = fs::write(log, &output); }
         }
 
-        if !had_output && progress < target_progress {
-            let elapsed = last_activity.elapsed().as_secs_f32();
-            if elapsed > 3.0 {
-                let creep = ((elapsed - 3.0) * 2.0) as u16;
-                progress = (progress + creep).min(target_progress);
-            }
-        } else if had_output && progress < target_progress {
-            progress = target_progress;
-        }
+        if !had_output && progress < target_progress { let elapsed = last_activity.elapsed().as_secs_f32(); if elapsed > 3.0 { progress = (progress + ((elapsed - 3.0) * 2.0) as u16).min(target_progress); } }
+        else if had_output && progress < target_progress { progress = target_progress; }
 
         if let Some(_status) = child.try_wait()? {
-            while let Ok(line) = rx.try_recv() {
-                output.push_str(&line);
-                output.push('\n');
-            }
-            progress = 100;
-            current_stage = String::from("Complete");
-            terminal.draw(|f: &mut Frame| {
-                draw_progress(f, &title, &theme, &output, &current_stage, progress, show_raw);
-            })?;
+            while let Ok(line) = rx.try_recv() { output.push_str(&line); output.push('\n'); }
+            progress = 100; current_stage = String::from("Complete");
+            terminal.draw(|f: &mut Frame| draw_progress(f, &title, &theme, &output, &current_stage, progress, show_raw))?;
             thread::sleep(std::time::Duration::from_millis(800));
             break;
         }
 
-        terminal.draw(|f: &mut Frame| {
-            draw_progress(f, &title, &theme, &output, &current_stage, progress, show_raw);
-        })?;
+        terminal.draw(|f: &mut Frame| draw_progress(f, &title, &theme, &output, &current_stage, progress, show_raw))?;
     }
 
-    crossterm::execute!(io::stdout(), crossterm::cursor::Show)?;
-    crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
-    crossterm::terminal::disable_raw_mode()?;
+    if !is_daemon {
+        crossterm::execute!(io::stdout(), crossterm::cursor::Show)?;
+        crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
+        crossterm::terminal::disable_raw_mode()?;
+    }
 
-    Ok(Response {
-        result: Some(serde_json::Value::String(output)),
-        cancelled,
-        error: None,
-    })
+    Ok(Response { result: Some(serde_json::Value::String(output)), cancelled, error: None })
 }
 
-fn draw_progress(
-    f: &mut Frame,
-    title: &str,
-    theme: &Theme,
-    output: &str,
-    current_stage: &str,
-    progress: u16,
-    show_raw: bool,
-) {
+fn draw_progress(f: &mut Frame, title: &str, theme: &Theme, output: &str, current_stage: &str, progress: u16, show_raw: bool) {
     let area = f.size();
-
-    if let Some(ref wm) = theme.watermark_path {
-        crate::watermark::render(f, area, wm);
-    }
+    if let Some(ref wm) = theme.watermark_path { crate::watermark::render(f, area, wm); }
 
     let box_area = layout::centered(80, 85, area);
     f.render_widget(Clear, box_area);
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(theme.border_style)
-        .title(title)
-        .title_style(theme.title_style);
+    let block = Block::default().borders(Borders::ALL).border_style(theme.border_style).title(title).title_style(theme.title_style);
     f.render_widget(block, box_area);
 
     let inner = box_area.inner(&Margin::new(2, 1));
 
     if show_raw {
-        let total_lines = output.lines().count() as u16;
-        let visible_lines = inner.height.saturating_sub(1);
-        let scroll = total_lines.saturating_sub(visible_lines);
-
-        let paragraph = Paragraph::new(output)
-            .style(theme.normal_style)
-            .wrap(Wrap { trim: false })
-            .scroll((scroll, 0));
-        f.render_widget(paragraph, inner);
-
-        let hint_y = box_area.y + box_area.height.saturating_sub(1);
-        let hint_x = box_area.x + 2;
-        if hint_y < area.height {
-            f.render_widget(
-                Paragraph::new(Line::from(Span::styled(
-                    " [Tab] progress view  [Esc] cancel",
-                    theme.muted_style,
-                ))),
-                ratatui::layout::Rect::new(hint_x, hint_y, box_area.width.saturating_sub(4), 1),
-            );
-        }
+        let tl = output.lines().count() as u16;
+        let vl = inner.height.saturating_sub(1);
+        f.render_widget(Paragraph::new(output).style(theme.normal_style).wrap(Wrap { trim: false }).scroll((tl.saturating_sub(vl), 0)), inner);
+        let hy = box_area.y + box_area.height.saturating_sub(1);
+        if hy < area.height { f.render_widget(Paragraph::new(Line::from(Span::styled(" [Tab] progress view  [Esc] cancel", theme.muted_style))), ratatui::layout::Rect::new(box_area.x + 2, hy, box_area.width.saturating_sub(4), 1)); }
     } else {
-        let chunks = Layout::default()
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Min(1),
-            ])
-            .split(inner);
-
-        let gauge = Gauge::default()
-            .gauge_style(Style::default().fg(theme.accent_color).add_modifier(Modifier::BOLD))
-            .percent(progress)
-            .label(format!("{}%", progress));
-        f.render_widget(gauge, chunks[0]);
-
-        let stage_line = Line::from(vec![
-            Span::styled(" Stage: ", theme.muted_style),
-            Span::styled(current_stage, theme.accent_style),
-        ]);
-        f.render_widget(Paragraph::new(stage_line), chunks[1]);
-
-        let hint = Paragraph::new(" [Tab] raw output  [Esc] cancel")
-            .style(theme.muted_style);
-        f.render_widget(hint, chunks[2]);
-
-        let recent: String = output
-            .lines()
-            .rev()
-            .take(15)
-            .collect::<Vec<&str>>()
-            .into_iter()
-            .rev()
-            .collect::<Vec<&str>>()
-            .join("\n");
-
-        f.render_widget(
-            Paragraph::new(recent)
-                .style(Style::default().fg(ratatui::style::Color::Gray))
-                .wrap(Wrap { trim: false }),
-            chunks[3],
-        );
+        let chunks = Layout::default().constraints([Constraint::Length(3), Constraint::Length(1), Constraint::Length(1), Constraint::Min(1)]).split(inner);
+        f.render_widget(Gauge::default().gauge_style(Style::default().fg(theme.accent_color).add_modifier(Modifier::BOLD)).percent(progress).label(format!("{}%", progress)), chunks[0]);
+        f.render_widget(Paragraph::new(Line::from(vec![Span::styled(" Stage: ", theme.muted_style), Span::styled(current_stage, theme.accent_style)])), chunks[1]);
+        f.render_widget(Paragraph::new(" [Tab] raw output  [Esc] cancel").style(theme.muted_style), chunks[2]);
+        let recent: String = output.lines().rev().take(15).collect::<Vec<&str>>().into_iter().rev().collect::<Vec<&str>>().join("\n");
+        f.render_widget(Paragraph::new(recent).style(Style::default().fg(ratatui::style::Color::Gray)).wrap(Wrap { trim: false }), chunks[3]);
     }
 }

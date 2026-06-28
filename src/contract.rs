@@ -19,6 +19,10 @@ pub enum Request {
         default: Option<String>,
         #[serde(default)]
         stability_colors: Option<HashMap<String, String>>,
+        #[serde(default)]
+        step: Option<u16>,
+        #[serde(default)]
+        total: Option<u16>,
     },
     #[serde(rename = "yesno")]
     YesNo {
@@ -28,6 +32,10 @@ pub enum Request {
         message: String,
         #[serde(default)]
         default: Option<bool>,
+        #[serde(default)]
+        step: Option<u16>,
+        #[serde(default)]
+        total: Option<u16>,
     },
     #[serde(rename = "input")]
     Input {
@@ -41,6 +49,10 @@ pub enum Request {
         placeholder: Option<String>,
         #[serde(default)]
         validation: Option<String>,
+        #[serde(default)]
+        step: Option<u16>,
+        #[serde(default)]
+        total: Option<u16>,
     },
     #[serde(rename = "password")]
     Password {
@@ -50,6 +62,10 @@ pub enum Request {
         message: String,
         #[serde(default)]
         placeholder: Option<String>,
+        #[serde(default)]
+        step: Option<u16>,
+        #[serde(default)]
+        total: Option<u16>,
     },
     #[serde(rename = "checklist")]
     Checklist {
@@ -66,12 +82,20 @@ pub enum Request {
         max: Option<usize>,
         #[serde(default)]
         default: Option<Vec<String>>,
+        #[serde(default)]
+        step: Option<u16>,
+        #[serde(default)]
+        total: Option<u16>,
     },
     #[serde(rename = "msg")]
     Msg {
         #[serde(default)]
         title: String,
         message: String,
+        #[serde(default)]
+        step: Option<u16>,
+        #[serde(default)]
+        total: Option<u16>,
     },
     #[serde(rename = "summary")]
     Summary {
@@ -81,6 +105,10 @@ pub enum Request {
         message: Option<String>,
         #[serde(default)]
         file: Option<String>,
+        #[serde(default)]
+        step: Option<u16>,
+        #[serde(default)]
+        total: Option<u16>,
     },
     #[serde(rename = "progress")]
     Progress {
@@ -89,6 +117,10 @@ pub enum Request {
         command: Vec<String>,
         #[serde(default)]
         logfile: Option<String>,
+        #[serde(default)]
+        step: Option<u16>,
+        #[serde(default)]
+        total: Option<u16>,
     },
     #[serde(rename = "filter")]
     Filter {
@@ -99,7 +131,45 @@ pub enum Request {
         choices: Vec<String>,
         #[serde(default)]
         placeholder: Option<String>,
+        #[serde(default)]
+        step: Option<u16>,
+        #[serde(default)]
+        total: Option<u16>,
     },
+    #[serde(rename = "quit")]
+    Quit,
+}
+
+impl Request {
+    pub fn step(&self) -> u16 {
+        match self {
+            Request::Menu { step, .. } => step.unwrap_or(0),
+            Request::YesNo { step, .. } => step.unwrap_or(0),
+            Request::Input { step, .. } => step.unwrap_or(0),
+            Request::Password { step, .. } => step.unwrap_or(0),
+            Request::Checklist { step, .. } => step.unwrap_or(0),
+            Request::Msg { step, .. } => step.unwrap_or(0),
+            Request::Summary { step, .. } => step.unwrap_or(0),
+            Request::Progress { step, .. } => step.unwrap_or(0),
+            Request::Filter { step, .. } => step.unwrap_or(0),
+            Request::Quit => 0,
+        }
+    }
+
+    pub fn total(&self) -> u16 {
+        match self {
+            Request::Menu { total, .. } => total.unwrap_or(0),
+            Request::YesNo { total, .. } => total.unwrap_or(0),
+            Request::Input { total, .. } => total.unwrap_or(0),
+            Request::Password { total, .. } => total.unwrap_or(0),
+            Request::Checklist { total, .. } => total.unwrap_or(0),
+            Request::Msg { total, .. } => total.unwrap_or(0),
+            Request::Summary { total, .. } => total.unwrap_or(0),
+            Request::Progress { total, .. } => total.unwrap_or(0),
+            Request::Filter { total, .. } => total.unwrap_or(0),
+            Request::Quit => 0,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]

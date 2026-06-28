@@ -10,35 +10,39 @@ pub mod filter;
 
 use crate::contract::{Request, Response};
 use anyhow::Result;
+use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
+use std::fs::File;
 
-pub fn dispatch(request: Request) -> Result<Response> {
+pub fn dispatch(request: Request, terminal: Option<&mut Terminal<CrosstermBackend<File>>>) -> Result<Response> {
     match request {
-        Request::Menu { title, message, choices, height: _, default, stability_colors } => {
-            menu::run(title, message, choices, default, stability_colors)
+        Request::Menu { title, message, choices, height: _, default, stability_colors, step: _, total: _ } => {
+            menu::run(terminal, title, message, choices, default, stability_colors)
         }
-        Request::YesNo { title, message, default } => {
-            yesno::run(title, message, default)
+        Request::YesNo { title, message, default, step: _, total: _ } => {
+            yesno::run(terminal, title, message, default)
         }
-        Request::Input { title, message, default, placeholder, validation } => {
-            input::run(title, message, default, placeholder, validation)
+        Request::Input { title, message, default, placeholder, validation, step: _, total: _ } => {
+            input::run(terminal, title, message, default, placeholder, validation)
         }
-        Request::Password { title, message, placeholder } => {
-            password::run(title, message, placeholder)
+        Request::Password { title, message, placeholder, step: _, total: _ } => {
+            password::run(terminal, title, message, placeholder)
         }
-        Request::Checklist { title, message, choices, height, min, max, default } => {
-            checklist::run(title, message, choices, height, min, max, default)
+        Request::Checklist { title, message, choices, height, min, max, default, step: _, total: _ } => {
+            checklist::run(terminal, title, message, choices, height, min, max, default)
         }
-        Request::Msg { title, message } => {
-            msg::run(title, message)
+        Request::Msg { title, message, step: _, total: _ } => {
+            msg::run(terminal, title, message)
         }
-        Request::Summary { title, message, file } => {
-            summary::run(title, message, file)
+        Request::Summary { title, message, file, step: _, total: _ } => {
+            summary::run(terminal, title, message, file)
         }
-        Request::Progress { title, command, logfile } => {
-            progress::run(title, command, logfile)
+        Request::Progress { title, command, logfile, step: _, total: _ } => {
+            progress::run(terminal, title, command, logfile)
         }
-        Request::Filter { title, message, choices, placeholder } => {
-            filter::run(title, message, choices, placeholder)
+        Request::Filter { title, message, choices, placeholder, step: _, total: _ } => {
+            filter::run(terminal, title, message, choices, placeholder)
         }
+        Request::Quit => Ok(Response { result: None, cancelled: false, error: None }),
     }
 }
