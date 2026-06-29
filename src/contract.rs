@@ -136,6 +136,19 @@ pub enum Request {
         #[serde(default)]
         total: Option<u16>,
     },
+    #[serde(rename = "text")]
+    Text {
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        file: Option<String>,
+        #[serde(default)]
+        content: Option<String>,
+        #[serde(default)]
+        step: Option<u16>,
+        #[serde(default)]
+        total: Option<u16>,
+    },
     #[serde(rename = "quit")]
     Quit,
 }
@@ -152,6 +165,7 @@ impl Request {
             Request::Summary { step, .. } => step.unwrap_or(0),
             Request::Progress { step, .. } => step.unwrap_or(0),
             Request::Filter { step, .. } => step.unwrap_or(0),
+            Request::Text { step, .. } => step.unwrap_or(0),
             Request::Quit => 0,
         }
     }
@@ -167,6 +181,7 @@ impl Request {
             Request::Summary { total, .. } => total.unwrap_or(0),
             Request::Progress { total, .. } => total.unwrap_or(0),
             Request::Filter { total, .. } => total.unwrap_or(0),
+            Request::Text { total, .. } => total.unwrap_or(0),
             Request::Quit => 0,
         }
     }
