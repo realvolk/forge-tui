@@ -8,6 +8,7 @@ pub mod progress;
 pub mod summary;
 pub mod text;
 pub mod yesno;
+pub mod disk;
 
 use crate::contract::{Request, Response};
 use anyhow::Result;
@@ -46,6 +47,9 @@ pub fn dispatch(request: Request, terminal: Option<&mut Terminal<CrosstermBacken
         }
         Request::Text { title, file, content, step: _, total: _ } => {
             text::run(terminal, title, file, content)
+        }
+        Request::Disk { title, disk, partitions, free_space, readonly, step: _, total: _ } => {
+            disk::run(terminal, title, disk, partitions, free_space, readonly)
         }
         Request::Quit => {
             Ok(Response { result: None, cancelled: false, error: None })

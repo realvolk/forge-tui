@@ -149,6 +149,23 @@ pub enum Request {
         #[serde(default)]
         total: Option<u16>,
     },
+    #[serde(rename = "disk")]
+    Disk {
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        disk: String,
+        #[serde(default)]
+        partitions: Value,
+        #[serde(default)]
+        free_space: Option<Value>,
+        #[serde(default)]
+        readonly: Option<bool>,
+        #[serde(default)]
+        step: Option<u16>,
+        #[serde(default)]
+        total: Option<u16>,
+    },
     #[serde(rename = "quit")]
     Quit,
 }
@@ -166,6 +183,7 @@ impl Request {
             Request::Progress { step, .. } => step.unwrap_or(0),
             Request::Filter { step, .. } => step.unwrap_or(0),
             Request::Text { step, .. } => step.unwrap_or(0),
+            Request::Disk { step, .. } => step.unwrap_or(0),
             Request::Quit => 0,
         }
     }
@@ -182,6 +200,7 @@ impl Request {
             Request::Progress { total, .. } => total.unwrap_or(0),
             Request::Filter { total, .. } => total.unwrap_or(0),
             Request::Text { total, .. } => total.unwrap_or(0),
+            Request::Disk { total, .. } => total.unwrap_or(0),
             Request::Quit => 0,
         }
     }
