@@ -39,6 +39,7 @@ enum Mode {
     TypePicker(usize),
     FlagPicker(usize),
     ResizeInput(usize),
+    NewPartition(usize),      // free space index
     Confirm(ConfirmDialog),
 }
 
@@ -92,6 +93,19 @@ fn start_to_bytes(s: &str) -> u64 { human_to_bytes(s) }
 fn end_to_bytes(s: &str) -> u64 { human_to_bytes(s) }
 fn size_to_bytes(s: &str) -> u64 { human_to_bytes(s) }
 
+fn partition_colors() -> Vec<Color> {
+    vec![
+        Color::Blue, Color::Cyan, Color::Magenta, Color::Green,
+        Color::Red, Color::Yellow, Color::LightBlue, Color::LightCyan,
+        Color::LightMagenta, Color::LightGreen, Color::LightRed, Color::LightYellow,
+    ]
+}
+
+fn color_for_index(idx: usize) -> Color {
+    let colors = partition_colors();
+    colors[idx % colors.len()]
+}
+
 fn parse_partitions(json: &Value) -> Vec<Partition> {
     let mut parts = Vec::new();
     if let Some(arr) = json.as_array() {
@@ -123,19 +137,11 @@ fn parse_free_space(json: &Value) -> Vec<FreeSpace> {
             let end   = v.get("end").and_then(|s| s.as_str()).unwrap_or("0").to_string();
             let size  = v.get("size").and_then(|s| s.as_str()).unwrap_or("0").to_string();
 
-            let end = if end == "0" && start != "0" {
+            let end = if end == "0" {
                 let start_bytes = human_to_bytes(&start);
                 let size_bytes  = human_to_bytes(&size);
                 if size_bytes > 0 {
                     bytes_to_human(start_bytes + size_bytes)
-                } else {
-                    end
-                }
-            } else if end == "0" && start == "0" {
-                // Entire disk free — end = size
-                let size_bytes = human_to_bytes(&size);
-                if size_bytes > 0 {
-                    bytes_to_human(size_bytes)
                 } else {
                     end
                 }
@@ -173,10 +179,8 @@ fn merge_adjacent_free_space(free: &mut Vec<FreeSpace>) {
         if a_end >= b_start {
             let a_start = start_to_bytes(&free[i].start);
             let b_end = end_to_bytes(&free[i + 1].end);
-            let new_end_bytes = b_end;
-            let new_size_bytes = b_end - a_start;
-            free[i].end = bytes_to_human(new_end_bytes);
-            free[i].size = bytes_to_human(new_size_bytes);
+            free[i].end = bytes_to_human(b_end);
+            free[i].size = bytes_to_human(b_end - a_start);
             free.remove(i + 1);
         } else {
             i += 1;
@@ -184,16 +188,49 @@ fn merge_adjacent_free_space(free: &mut Vec<FreeSpace>) {
     }
 }
 
-fn partition_from_free_space(fs: &FreeSpace, num: u32, ptype: &str) -> Partition {
-    Partition {
-        number: num,
-        start: fs.start.clone(),
-        end: fs.end.clone(),
-        size: fs.size.clone(),
-        ptype: ptype.to_string(),
+fn create_partition_from_free_space(
+    fs_idx: usize,
+    size_str: &str,
+    partitions: &mut Vec<Partition>,
+    free_space: &mut Vec<FreeSpace>,
+) {
+    let size_bytes = human_to_bytes(size_str);
+    if size_bytes == 0 { return; }
+
+    let fs = &free_space[fs_idx];
+    let fs_start_bytes = start_to_bytes(&fs.start);
+    let fs_end_bytes = end_to_bytes(&fs.end);
+    let fs_size_bytes = fs_end_bytes - fs_start_bytes;
+
+    // Clamp requested size to available free space
+    let clamped_size = size_bytes.min(fs_size_bytes);
+    if clamped_size == 0 { return; }
+
+    let new_num = partitions.iter().map(|p| p.number).max().unwrap_or(0) + 1;
+    let new_start = fs.start.clone();
+    let new_end = bytes_to_human(fs_start_bytes + clamped_size);
+    let new_size = bytes_to_human(clamped_size);
+
+    partitions.push(Partition {
+        number: new_num,
+        start: new_start.clone(),
+        end: new_end.clone(),
+        size: new_size,
+        ptype: "Linux filesystem".to_string(),
         flags: vec![],
         fs_signature: None,
+    });
+
+    // Adjust free space
+    let remaining = fs_size_bytes - clamped_size;
+    if remaining > 0 {
+        free_space[fs_idx].start = new_end;
+        free_space[fs_idx].size = bytes_to_human(remaining);
+        free_space[fs_idx].end = bytes_to_human(fs_start_bytes + fs_size_bytes);
+    } else {
+        free_space.remove(fs_idx);
     }
+    merge_adjacent_free_space(free_space);
 }
 
 fn apply_resize(
@@ -264,7 +301,7 @@ pub fn run(
     let mut mode: Mode = Mode::Main;
     let mut type_list_state = ListState::default();
     let mut flag_list_state = ListState::default();
-    let mut resize_input = String::new();
+    let mut input_buffer = String::new();
 
     let mut owned_terminal;
     let terminal = match terminal {
@@ -342,7 +379,17 @@ pub fn run(
                     let p = &partitions[*part_idx];
                     let hint = format!(
                         " New size for partition {} (current: {}): {}",
-                        p.number, p.size, resize_input
+                        p.number, p.size, input_buffer
+                    );
+                    f.render_widget(Paragraph::new(hint.as_str()).style(theme.accent_style), chunks[1]);
+                    f.set_cursor(chunks[1].x + hint.len() as u16, chunks[1].y);
+                    f.render_widget(Paragraph::new(" Enter:confirm  Esc:cancel "), chunks[3]);
+                }
+                Mode::NewPartition(fs_idx) => {
+                    let fs = &free_space[*fs_idx];
+                    let hint = format!(
+                        " New partition size (free: {}): {}",
+                        fs.size, input_buffer
                     );
                     f.render_widget(Paragraph::new(hint.as_str()).style(theme.accent_style), chunks[1]);
                     f.set_cursor(chunks[1].x + hint.len() as u16, chunks[1].y);
@@ -471,18 +518,47 @@ pub fn run(
                 if let Event::Key(key) = event::read()? {
                     match key.code {
                         KeyCode::Enter => {
-                            if !resize_input.is_empty() {
-                                apply_resize(&mut partitions, &mut free_space, part_idx, &resize_input);
-                                resize_input.clear();
+                            if !input_buffer.is_empty() {
+                                apply_resize(&mut partitions, &mut free_space, part_idx, &input_buffer);
+                                input_buffer.clear();
                             }
                             mode = Mode::Main;
                         }
                         KeyCode::Esc => {
-                            resize_input.clear();
+                            input_buffer.clear();
                             mode = Mode::Main;
                         }
-                        KeyCode::Backspace => { resize_input.pop(); }
-                        KeyCode::Char(c) => { resize_input.push(c); }
+                        KeyCode::Backspace => { input_buffer.pop(); }
+                        KeyCode::Char(c) => { input_buffer.push(c); }
+                        _ => {}
+                    }
+                }
+                continue;
+            }
+
+            Mode::NewPartition(fs_idx) => {
+                let fs_idx = *fs_idx;
+                if let Event::Key(key) = event::read()? {
+                    match key.code {
+                        KeyCode::Enter => {
+                            if !input_buffer.is_empty() {
+                                create_partition_from_free_space(
+                                    fs_idx,
+                                    &input_buffer,
+                                    &mut partitions,
+                                    &mut free_space,
+                                );
+                                input_buffer.clear();
+                                selected_idx = partitions.len() - 1;
+                            }
+                            mode = Mode::Main;
+                        }
+                        KeyCode::Esc => {
+                            input_buffer.clear();
+                            mode = Mode::Main;
+                        }
+                        KeyCode::Backspace => { input_buffer.pop(); }
+                        KeyCode::Char(c) => { input_buffer.push(c); }
                         _ => {}
                     }
                 }
@@ -504,17 +580,10 @@ pub fn run(
                     if selected_idx + 1 < total_items { selected_idx += 1; }
                 }
                 KeyCode::Char('n') if !readonly => {
-                    if !free_space.is_empty() {
-                        let idx = free_space.iter()
-                            .enumerate()
-                            .max_by(|(_, a), (_, b)| size_to_bytes(&a.size).cmp(&size_to_bytes(&b.size)))
-                            .map(|(i, _)| i)
-                            .unwrap_or(0);
-                        let fs = &free_space[idx];
-                        let new_num = partitions.iter().map(|p| p.number).max().unwrap_or(0) + 1;
-                        partitions.push(partition_from_free_space(fs, new_num, "Linux filesystem"));
-                        free_space.remove(idx);
-                        selected_idx = partitions.len() - 1;
+                    if selected_idx >= partitions.len() {
+                        let fs_idx = selected_idx - partitions.len();
+                        input_buffer.clear();
+                        mode = Mode::NewPartition(fs_idx);
                     }
                 }
                 KeyCode::Char('d') if !readonly => {
@@ -546,7 +615,7 @@ pub fn run(
                 }
                 KeyCode::Char('r') if !readonly => {
                     if selected_idx < partitions.len() {
-                        resize_input.clear();
+                        input_buffer.clear();
                         mode = Mode::ResizeInput(selected_idx);
                     }
                 }
@@ -603,8 +672,9 @@ fn draw_partition_bar(f: &mut Frame, area: Rect, partitions: &[Partition], free_
     if max_end == 0 { return; }
 
     let mut segments: Vec<(&str, u64, u64, Color)> = Vec::new();
-    for p in partitions {
-        segments.push((&p.ptype, start_to_bytes(&p.start), end_to_bytes(&p.end), Color::Blue));
+    for (i, p) in partitions.iter().enumerate() {
+        let color = color_for_index(i);
+        segments.push((&p.ptype, start_to_bytes(&p.start), end_to_bytes(&p.end), color));
     }
     for fs in free_space {
         segments.push(("Free", start_to_bytes(&fs.start), end_to_bytes(&fs.end), Color::DarkGray));
