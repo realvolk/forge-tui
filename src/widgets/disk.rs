@@ -119,11 +119,31 @@ fn parse_free_space(json: &Value) -> Vec<FreeSpace> {
     let mut free = Vec::new();
     if let Some(arr) = json.as_array() {
         for v in arr {
-            free.push(FreeSpace {
-                start: v.get("start").and_then(|s| s.as_str()).unwrap_or("0").to_string(),
-                end:   v.get("end").and_then(|s| s.as_str()).unwrap_or("0").to_string(),
-                size:  v.get("size").and_then(|s| s.as_str()).unwrap_or("0").to_string(),
-            });
+            let start = v.get("start").and_then(|s| s.as_str()).unwrap_or("0").to_string();
+            let end   = v.get("end").and_then(|s| s.as_str()).unwrap_or("0").to_string();
+            let size  = v.get("size").and_then(|s| s.as_str()).unwrap_or("0").to_string();
+
+            let end = if end == "0" && start != "0" {
+                let start_bytes = human_to_bytes(&start);
+                let size_bytes  = human_to_bytes(&size);
+                if size_bytes > 0 {
+                    bytes_to_human(start_bytes + size_bytes)
+                } else {
+                    end
+                }
+            } else if end == "0" && start == "0" {
+                // Entire disk free — end = size
+                let size_bytes = human_to_bytes(&size);
+                if size_bytes > 0 {
+                    bytes_to_human(size_bytes)
+                } else {
+                    end
+                }
+            } else {
+                end
+            };
+
+            free.push(FreeSpace { start, end, size });
         }
     }
     free.sort_by(|a, b| start_to_bytes(&a.start).cmp(&start_to_bytes(&b.start)));
@@ -565,6 +585,17 @@ pub fn run(
 fn draw_partition_bar(f: &mut Frame, area: Rect, partitions: &[Partition], free_space: &[FreeSpace]) {
     let total_width = area.width.saturating_sub(2) as usize;
     if total_width == 0 { return; }
+
+    if partitions.is_empty() && free_space.len() == 1 {
+        let fs = &free_space[0];
+        let label = format!("Free: {}", fs.size);
+        let span = Span::styled(
+            format!("{:^width$}", label, width = total_width),
+            Style::default().bg(Color::DarkGray).fg(Color::White),
+        );
+        f.render_widget(Paragraph::new(Line::from(vec![span])), area);
+        return;
+    }
 
     let mut max_end: u64 = 0;
     for p in partitions { max_end = max_end.max(end_to_bytes(&p.end)); }
