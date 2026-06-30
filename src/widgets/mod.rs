@@ -9,6 +9,7 @@ pub mod summary;
 pub mod text;
 pub mod yesno;
 pub mod disk;
+pub mod multiselect;
 
 use crate::contract::{Request, Response};
 use anyhow::Result;
@@ -50,6 +51,9 @@ pub fn dispatch(request: Request, terminal: Option<&mut Terminal<CrosstermBacken
         }
         Request::Disk { title, disk, partitions, free_space, readonly, step: _, total: _ } => {
             disk::run(terminal, title, disk, partitions, free_space, readonly)
+        }
+        Request::Multiselect { title, message, choices, placeholder, min, max, step: _, total: _ } => {
+            multiselect::run(terminal, title, message, choices, placeholder, min, max)
         }
         Request::Quit => {
             Ok(Response { result: None, cancelled: false, error: None })

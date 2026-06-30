@@ -166,6 +166,24 @@ pub enum Request {
         #[serde(default)]
         total: Option<u16>,
     },
+    #[serde(rename = "multiselect")]
+    Multiselect {
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        message: String,
+        choices: Vec<String>,
+        #[serde(default)]
+        placeholder: Option<String>,
+        #[serde(default)]
+        min: Option<usize>,
+        #[serde(default)]
+        max: Option<usize>,
+        #[serde(default)]
+        step: Option<u16>,
+        #[serde(default)]
+        total: Option<u16>,
+    },
     #[serde(rename = "quit")]
     Quit,
 }
@@ -184,6 +202,7 @@ impl Request {
             Request::Filter { step, .. } => step.unwrap_or(0),
             Request::Text { step, .. } => step.unwrap_or(0),
             Request::Disk { step, .. } => step.unwrap_or(0),
+            Request::Multiselect { step, .. } => step.unwrap_or(0),
             Request::Quit => 0,
         }
     }
@@ -201,6 +220,7 @@ impl Request {
             Request::Filter { total, .. } => total.unwrap_or(0),
             Request::Text { total, .. } => total.unwrap_or(0),
             Request::Disk { total, .. } => total.unwrap_or(0),
+            Request::Multiselect { total, .. } => total.unwrap_or(0),
             Request::Quit => 0,
         }
     }
