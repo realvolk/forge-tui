@@ -3,6 +3,7 @@ use crate::theme::Theme;
 use crate::watermark;
 use crate::widgets;
 use anyhow::Result;
+use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Layout},
@@ -15,6 +16,7 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 
 struct DaemonRequest {
     request: Request,
@@ -43,35 +45,90 @@ pub fn run(listener: UnixListener) -> Result<()> {
     });
 
     let mut breadcrumb: Option<(String, u16, u16)> = None;
-    let footer_text = String::from("Tab: navigate  Enter: select  Esc: back");
+    let footer_text = String::from("j/k:move  Enter:select  Esc:cancel  Ctrl+C:quit");
 
     loop {
         terminal.draw(|f: &mut Frame| {
             let area = f.size();
-            if let Some(ref wm) = theme.watermark_path { watermark::render(f, area, wm); }
-            let chunks = Layout::default().constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)]).split(area);
+            if let Some(ref wm) = theme.watermark_path {
+                watermark::render(f, area, wm);
+            }
+            let chunks = Layout::default()
+                .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+                .split(area);
 
             if let Some((ref title, step, total)) = breadcrumb {
                 let left = Span::styled(" ArtixForge ", theme.title_style);
-                let step_text = if total > 0 { format!("Step {}/{}", step, total) } else { String::new() };
-                let mut spans = vec![left, Span::styled(format!("  {}  ", title), theme.accent_style.add_modifier(Modifier::BOLD))];
-                if total > 0 { spans.push(Span::raw(" ")); spans.push(Span::styled(step_text, theme.muted_style)); }
-                f.render_widget(Paragraph::new(Line::from(spans)).style(Style::default().bg(theme.border_style.fg.unwrap_or(ratatui::style::Color::DarkGray))), chunks[0]);
+                let step_text = if total > 0 {
+                    format!("Step {}/{}", step, total)
+                } else {
+                    String::new()
+                };
+                let mut spans = vec![
+                    left,
+                    Span::styled(
+                        format!("  {}  ", title),
+                        theme.accent_style.add_modifier(Modifier::BOLD),
+                    ),
+                ];
+                if total > 0 {
+                    spans.push(Span::raw(" "));
+                    spans.push(Span::styled(step_text, theme.muted_style));
+                }
+                f.render_widget(
+                    Paragraph::new(Line::from(spans)).style(
+                        Style::default().bg(
+                            theme.border_style.fg.unwrap_or(ratatui::style::Color::DarkGray),
+                        ),
+                    ),
+                    chunks[0],
+                );
             } else {
-                f.render_widget(Paragraph::new(Line::from(Span::styled(" Ready ", theme.accent_style))), chunks[0]);
+                f.render_widget(
+                    Paragraph::new(Line::from(Span::styled(" Ready ", theme.accent_style))),
+                    chunks[0],
+                );
             }
 
-            f.render_widget(Paragraph::new("Waiting for command...").style(theme.muted_style).alignment(Alignment::Center), chunks[1]);
-            f.render_widget(Paragraph::new(Line::from(Span::styled(format!("  {}  ", footer_text), theme.muted_style))).alignment(Alignment::Center), chunks[2]);
+            f.render_widget(
+                Paragraph::new("Waiting for command...")
+                    .style(theme.muted_style)
+                    .alignment(Alignment::Center),
+                chunks[1],
+            );
+            f.render_widget(
+                Paragraph::new(Line::from(Span::styled(
+                    format!("  {}  ", footer_text),
+                    theme.muted_style,
+                )))
+                .alignment(Alignment::Center),
+                chunks[2],
+            );
         })?;
 
-        let daemon_req = match request_rx.recv() {
+        // Check for Ctrl+C while idle
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                if key.code == KeyCode::Char('c')
+                    && key.modifiers == KeyModifiers::CONTROL
+                {
+                    break;
+                }
+            }
+        }
+
+        let daemon_req = match request_rx.try_recv() {
             Ok(req) => req,
-            Err(_) => break,
+            Err(mpsc::TryRecvError::Empty) => continue,
+            Err(mpsc::TryRecvError::Disconnected) => break,
         };
 
         if matches!(&daemon_req.request, Request::Quit) {
-            let _ = daemon_req.response_tx.send(Response { result: None, cancelled: false, error: None });
+            let _ = daemon_req.response_tx.send(Response {
+                result: None,
+                cancelled: false,
+                error: None,
+            });
             break;
         }
 
@@ -80,7 +137,11 @@ pub fn run(listener: UnixListener) -> Result<()> {
 
         let response = match widgets::dispatch(daemon_req.request, Some(&mut terminal)) {
             Ok(resp) => resp,
-            Err(e) => Response { result: None, cancelled: true, error: Some(format!("{}", e)) },
+            Err(e) => Response {
+                result: None,
+                cancelled: true,
+                error: Some(format!("{}", e)),
+            },
         };
 
         let _ = daemon_req.response_tx.send(response);
@@ -99,7 +160,13 @@ fn handle_client(mut stream: UnixStream, request_tx: mpsc::Sender<DaemonRequest>
         let line = line.trim().to_string();
         if let Ok(request) = serde_json::from_str::<Request>(&line) {
             let (response_tx, response_rx) = mpsc::channel();
-            if request_tx.send(DaemonRequest { request, response_tx }).is_ok() {
+            if request_tx
+                .send(DaemonRequest {
+                    request,
+                    response_tx,
+                })
+                .is_ok()
+            {
                 if let Ok(response) = response_rx.recv() {
                     let json = serde_json::to_string(&response).unwrap_or_default();
                     let _ = stream.write_all(json.as_bytes());

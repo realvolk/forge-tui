@@ -1,18 +1,16 @@
 use crate::contract::Response;
-use crate::layout;
 use crate::theme::Theme;
+use crate::widgets::helpers;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, MouseEventKind};
 use ratatui::{
     backend::CrosstermBackend,
-    layout::Margin,
-    text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, Wrap},
+    layout::Rect,
+    widgets::{Paragraph, Scrollbar, ScrollbarOrientation, Wrap},
     Terminal, Frame,
 };
 use std::fs;
 use std::fs::File;
-use std::io;
 
 pub fn run(
     terminal: Option<&mut Terminal<CrosstermBackend<File>>>,
@@ -31,61 +29,69 @@ pub fn run(
     let total_lines = text.lines().count() as u16;
     let mut scroll: u16 = 0;
 
-    let mut owned_terminal;
-    let terminal = match terminal {
+    let mut owned;
+    let term: &mut Terminal<CrosstermBackend<File>> = match terminal {
         Some(t) => t,
         None => {
-            let stdout = crate::tty::open()?;
-            crossterm::terminal::enable_raw_mode()?;
-            crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
-            crossterm::execute!(io::stdout(), crossterm::event::EnableMouseCapture)?;
-            crossterm::execute!(io::stdout(), crossterm::cursor::Hide)?;
-            owned_terminal = Terminal::new(CrosstermBackend::new(stdout))?;
-            &mut owned_terminal
+            helpers::enable_mouse()?;
+            owned = helpers::setup_one_shot()?;
+            &mut owned
         }
     };
 
     loop {
-        terminal.draw(|f: &mut Frame| {
+        term.draw(|f: &mut Frame| {
             let area = f.size();
             if let Some(ref wm) = theme.watermark_path { crate::watermark::render(f, area, wm); }
+            let inner = helpers::render_box(f, area, &title);
 
-            let box_area = layout::centered(80, 80, area);
-            f.render_widget(Clear, box_area);
-            let block = Block::default().borders(Borders::ALL).border_style(theme.border_style)
-                .title(title.as_str()).title_style(theme.title_style);
-            f.render_widget(block, box_area);
-
-            let inner = box_area.inner(&Margin::new(2, 1));
-            let visible_height = inner.height;
+            let visible_height = inner.height.saturating_sub(2);
             let max_scroll = total_lines.saturating_sub(visible_height);
+            scroll = scroll.min(max_scroll);
 
-            f.render_widget(Paragraph::new(text.as_str()).style(theme.normal_style).wrap(Wrap { trim: false }).scroll((scroll, 0)), inner);
+            f.render_widget(
+                Paragraph::new(text.as_str())
+                    .style(theme.normal_style)
+                    .wrap(Wrap { trim: false })
+                    .scroll((scroll, 0)),
+                inner,
+            );
 
             if max_scroll > 0 {
                 let mut sb = ratatui::widgets::ScrollbarState::new(max_scroll as usize).position(scroll as usize);
-                f.render_stateful_widget(Scrollbar::default().orientation(ScrollbarOrientation::VerticalRight), inner, &mut sb);
+                f.render_stateful_widget(
+                    Scrollbar::default().orientation(ScrollbarOrientation::VerticalRight),
+                    inner,
+                    &mut sb,
+                );
             }
 
-            let hy = box_area.y + box_area.height.saturating_sub(1);
-            let hx = box_area.x + 2;
-            if hy < area.height && hx < area.width {
-                f.render_widget(Paragraph::new(Line::from(Span::styled(" j/k:scroll  PgUp/PgDn  Home/End  q:quit ", theme.muted_style))), ratatui::layout::Rect::new(hx, hy, box_area.width.saturating_sub(4), 1));
+            let hint_y = inner.y + inner.height.saturating_sub(1);
+            if hint_y < area.height {
+                f.render_widget(
+                    helpers::footer("j/k:scroll  PgUp/PgDn  Home/End  q:quit  Ctrl+C:quit"),
+                    Rect::new(inner.x, hint_y, inner.width, 1),
+                );
             }
         })?;
 
         match event::read()? {
-            Event::Key(key) => match key.code {
-                KeyCode::Up | KeyCode::Char('k') => scroll = scroll.saturating_sub(1),
-                KeyCode::Down | KeyCode::Char('j') => scroll = (scroll + 1).min(total_lines.saturating_sub(1)),
-                KeyCode::PageUp => scroll = scroll.saturating_sub(10),
-                KeyCode::PageDown => scroll = (scroll + 10).min(total_lines.saturating_sub(1)),
-                KeyCode::Home => scroll = 0,
-                KeyCode::End => scroll = total_lines.saturating_sub(1),
-                KeyCode::Enter | KeyCode::Esc | KeyCode::Char('q') => break,
-                _ => {}
-            },
-            Event::Mouse(mouse) => match mouse.kind {
+            Event::Key(key) => {
+                if helpers::is_cancel(&Event::Key(key)) {
+                    return Ok(Response { result: None, cancelled: true, error: None });
+                }
+                match key.code {
+                    KeyCode::Up | KeyCode::Char('k') => scroll = scroll.saturating_sub(1),
+                    KeyCode::Down | KeyCode::Char('j') => scroll = (scroll + 1).min(total_lines.saturating_sub(1)),
+                    KeyCode::PageUp => scroll = scroll.saturating_sub(10),
+                    KeyCode::PageDown => scroll = (scroll + 10).min(total_lines.saturating_sub(1)),
+                    KeyCode::Home => scroll = 0,
+                    KeyCode::End => scroll = total_lines.saturating_sub(1),
+                    KeyCode::Enter | KeyCode::Char('q') => break,
+                    _ => {}
+                }
+            }
+            Event::Mouse(m) => match m.kind {
                 MouseEventKind::ScrollDown => scroll = (scroll + 3).min(total_lines.saturating_sub(1)),
                 MouseEventKind::ScrollUp => scroll = scroll.saturating_sub(3),
                 _ => {}
@@ -95,10 +101,8 @@ pub fn run(
     }
 
     if !is_daemon {
-        crossterm::execute!(io::stdout(), crossterm::cursor::Show)?;
-        crossterm::execute!(io::stdout(), crossterm::event::DisableMouseCapture)?;
-        crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
-        crossterm::terminal::disable_raw_mode()?;
+        helpers::disable_mouse()?;
+        helpers::teardown_one_shot()?;
     }
     Ok(Response { result: None, cancelled: false, error: None })
 }

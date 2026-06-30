@@ -1,20 +1,19 @@
 use crate::contract::Response;
-use crate::layout;
 use crate::theme::Theme;
+use crate::widgets::helpers;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, MouseEventKind};
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Layout, Margin},
+    layout::{Constraint, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{List, ListItem, ListState, Paragraph, Wrap},
     Terminal, Frame,
 };
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io;
 
 struct Choice {
     label: String,
@@ -58,27 +57,22 @@ pub fn run(
     default: Option<String>,
     stability_colors: Option<HashMap<String, String>>,
 ) -> Result<Response> {
-    let choices: Vec<Choice> = match &choices_json {
-        Value::Array(arr) => arr.iter().map(Choice::from_value).collect(),
-        _ => vec![],
-    };
-
     let is_daemon = terminal.is_some();
     let theme = Theme::load();
 
-    // One-shot: set up terminal
-    let mut owned_terminal;
-    let terminal = match terminal {
+    let mut owned;
+    let term: &mut Terminal<CrosstermBackend<File>> = match terminal {
         Some(t) => t,
         None => {
-            let stdout = crate::tty::open()?;
-            crossterm::terminal::enable_raw_mode()?;
-            crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
-            crossterm::execute!(io::stdout(), crossterm::event::EnableMouseCapture)?;
-            crossterm::execute!(io::stdout(), crossterm::cursor::Hide)?;
-            owned_terminal = Terminal::new(CrosstermBackend::new(stdout))?;
-            &mut owned_terminal
+            helpers::enable_mouse()?;
+            owned = helpers::setup_one_shot()?;
+            &mut owned
         }
+    };
+
+    let choices: Vec<Choice> = match &choices_json {
+        Value::Array(arr) => arr.iter().map(Choice::from_value).collect(),
+        _ => vec![],
     };
 
     let default_idx = default.as_ref().and_then(|d| choices.iter().position(|c| c.label == *d)).unwrap_or(0);
@@ -90,24 +84,19 @@ pub fn run(
     let has_info = has_warnings || has_meta;
 
     let result = loop {
-        terminal.draw(|f: &mut Frame| {
+        term.draw(|f: &mut Frame| {
             let area = f.size();
             if let Some(ref wm) = theme.watermark_path { crate::watermark::render(f, area, wm); }
+            let inner = helpers::render_box(f, area, &title);
 
-            let box_area = layout::centered(80, 80, area);
-            f.render_widget(Clear, box_area);
-
-            let block = Block::default().borders(Borders::ALL).border_style(theme.border_style)
-                .title(title.as_str()).title_style(theme.title_style);
-            f.render_widget(block, box_area);
-
-            let inner = box_area.inner(&Margin::new(2, 1));
             let has_msg = !message.is_empty();
             let mut constraints: Vec<Constraint> = Vec::new();
             if has_msg { constraints.push(Constraint::Length(2)); }
             constraints.push(Constraint::Min(1));
             if has_info { constraints.push(Constraint::Length(3)); }
+            constraints.push(Constraint::Length(1));
             let chunks = Layout::default().constraints(constraints).split(inner);
+            let footer_idx = chunks.len() - 1;
 
             let mut offset = 0;
             if has_msg {
@@ -116,26 +105,25 @@ pub fn run(
             }
 
             let items: Vec<ListItem> = choices.iter().enumerate().map(|(i, choice)| {
-                let is_selected = state.selected() == Some(i);
+                let is_sel = state.selected() == Some(i);
                 let mut spans: Vec<Span> = Vec::new();
-                if is_selected { spans.push(Span::styled("> ", theme.accent_style)); }
-                else { spans.push(Span::raw("  ")); }
-                let bs = if is_selected { theme.selected_style } else { theme.normal_style };
+                spans.push(Span::styled(if is_sel { "> " } else { "  " },
+                    if is_sel { theme.accent_style } else { theme.normal_style }));
+                let bs = if is_sel { theme.selected_style } else { theme.normal_style };
                 spans.push(Span::styled(format!("{}  ", choice.label), bs));
                 if has_meta {
-                    let meta_text = choice.meta.as_deref().unwrap_or("");
-                    spans.push(Span::styled(format!("{}  ", meta_text), if is_selected { theme.selected_style } else { theme.muted_style }));
+                    spans.push(Span::styled(format!("{}  ", choice.meta.as_deref().unwrap_or("")),
+                        if is_sel { theme.selected_style } else { theme.muted_style }));
                 }
                 if has_stability {
                     if let Some(ref st) = choice.stability {
-                        let color = stability_map.get(st).map(|s| parse_color(s)).unwrap_or(Color::Gray);
-                        spans.push(Span::styled("* ", Style::default().fg(color)));
-                        spans.push(Span::styled(st.as_str(), Style::default().fg(color)));
+                        let c = stability_map.get(st).map(|s| parse_color(s)).unwrap_or(Color::Gray);
+                        spans.push(Span::styled("* ", Style::default().fg(c)));
+                        spans.push(Span::styled(st.as_str(), Style::default().fg(c)));
                     }
                 }
                 ListItem::new(Line::from(spans))
             }).collect();
-
             f.render_stateful_widget(List::new(items), chunks[offset], &mut state.clone());
 
             if has_info {
@@ -152,31 +140,47 @@ pub fn run(
                     }
                 }
             }
+
+            f.render_widget(helpers::footer("j/k:move  Enter:select  Esc:cancel  Ctrl+C:quit"), chunks[footer_idx]);
         })?;
 
         match event::read()? {
-            Event::Key(key) => match key.code {
-                KeyCode::Up | KeyCode::Char('k') => { let i = state.selected().unwrap_or(0); if i > 0 { state.select(Some(i - 1)); } }
-                KeyCode::Down | KeyCode::Char('j') => { let i = state.selected().unwrap_or(0); if i < choices.len().saturating_sub(1) { state.select(Some(i + 1)); } }
-                KeyCode::Enter => { let idx = state.selected().unwrap_or(default_idx); break Response { result: Some(Value::String(choices[idx].label.clone())), cancelled: false, error: None }; }
-                KeyCode::Esc => break Response { result: None, cancelled: true, error: None },
-                _ => {}
-            },
-            Event::Mouse(mouse) => match mouse.kind {
-                MouseEventKind::ScrollDown => { let i = state.selected().unwrap_or(0); if i < choices.len().saturating_sub(1) { state.select(Some(i + 1)); } }
-                MouseEventKind::ScrollUp => { let i = state.selected().unwrap_or(0); if i > 0 { state.select(Some(i - 1)); } }
+            Event::Key(key) => {
+                if helpers::is_cancel(&Event::Key(key)) {
+                    break Response { result: None, cancelled: true, error: None };
+                }
+                match (key.code, key.modifiers) {
+                    (KeyCode::Up, _) | (KeyCode::Char('k'), _) => {
+                        if state.selected().unwrap_or(0) > 0 { state.select(Some(state.selected().unwrap_or(0) - 1)); }
+                    }
+                    (KeyCode::Down, _) | (KeyCode::Char('j'), _) => {
+                        let i = state.selected().unwrap_or(0);
+                        if i < choices.len().saturating_sub(1) { state.select(Some(i + 1)); }
+                    }
+                    (KeyCode::Enter, _) => {
+                        let idx = state.selected().unwrap_or(default_idx);
+                        break Response { result: Some(Value::String(choices[idx].label.clone())), cancelled: false, error: None };
+                    }
+                    _ => {}
+                }
+            }
+            Event::Mouse(m) => match m.kind {
+                MouseEventKind::ScrollDown => {
+                    let i = state.selected().unwrap_or(0);
+                    if i < choices.len().saturating_sub(1) { state.select(Some(i + 1)); }
+                }
+                MouseEventKind::ScrollUp => {
+                    if state.selected().unwrap_or(0) > 0 { state.select(Some(state.selected().unwrap_or(0) - 1)); }
+                }
                 _ => {}
             },
             _ => {}
         }
     };
 
-    // One-shot: tear down terminal
     if !is_daemon {
-        crossterm::execute!(io::stdout(), crossterm::cursor::Show)?;
-        crossterm::execute!(io::stdout(), crossterm::event::DisableMouseCapture)?;
-        crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
-        crossterm::terminal::disable_raw_mode()?;
+        helpers::disable_mouse()?;
+        helpers::teardown_one_shot()?;
     }
     Ok(result)
 }

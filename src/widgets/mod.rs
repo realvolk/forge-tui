@@ -1,15 +1,16 @@
 pub mod checklist;
+pub mod disk;
 pub mod filter;
+pub mod helpers;
 pub mod input;
 pub mod menu;
 pub mod msg;
+pub mod multiselect;
 pub mod password;
 pub mod progress;
 pub mod summary;
 pub mod text;
 pub mod yesno;
-pub mod disk;
-pub mod multiselect;
 
 use crate::contract::{Request, Response};
 use anyhow::Result;
@@ -46,17 +47,15 @@ pub fn dispatch(request: Request, terminal: Option<&mut Terminal<CrosstermBacken
         Request::Filter { title, message, choices, placeholder, step: _, total: _ } => {
             filter::run(terminal, title, message, choices, placeholder)
         }
+        Request::Multiselect { title, message, choices, placeholder, min, max, step: _, total: _ } => {
+            multiselect::run(terminal, title, message, choices, placeholder, min, max)
+        }
         Request::Text { title, file, content, step: _, total: _ } => {
             text::run(terminal, title, file, content)
         }
         Request::Disk { title, disk, partitions, free_space, readonly, step: _, total: _ } => {
             disk::run(terminal, title, disk, partitions, free_space, readonly)
         }
-        Request::Multiselect { title, message, choices, placeholder, min, max, step: _, total: _ } => {
-            multiselect::run(terminal, title, message, choices, placeholder, min, max)
-        }
-        Request::Quit => {
-            Ok(Response { result: None, cancelled: false, error: None })
-        }
+        Request::Quit => Ok(Response { result: None, cancelled: false, error: None }),
     }
 }
