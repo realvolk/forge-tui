@@ -1,5 +1,4 @@
 use crate::contract::Response;
-use crate::layout;
 use crate::theme::Theme;
 use crate::widgets::helpers;
 use anyhow::Result;

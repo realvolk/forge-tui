@@ -7,11 +7,11 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Layout},
     style::{Color, Modifier, Style},
-    text::Span,
     widgets::{Gauge, Paragraph, Wrap},
     Terminal, Frame,
 };
 use std::fs::File;
+use std::io::IsTerminal;
 
 pub fn run(
     terminal: Option<&mut Terminal<CrosstermBackend<File>>>,
@@ -22,6 +22,7 @@ pub fn run(
     let is_daemon = terminal.is_some();
     let theme = Theme::load();
     let mut password = String::new();
+    let is_raw_tty = std::io::stdin().is_terminal();
 
     let mut owned;
     let term: &mut Terminal<CrosstermBackend<File>> = match terminal {
@@ -34,8 +35,12 @@ pub fn run(
 
     let result = loop {
         let masked = "*".repeat(password.len());
-        let display = if masked.is_empty() { placeholder.as_deref().unwrap_or("") } else { &masked };
-        let (score, label, bar_color) = password_strength(&password);
+        let display = if is_raw_tty {
+            if masked.is_empty() { placeholder.as_deref().unwrap_or("") } else { &masked }
+        } else {
+            &password
+        };
+        let (score, label, bar_color) = if is_raw_tty { password_strength(&password) } else { (0, "", Color::Gray) };
 
         term.draw(|f: &mut Frame| {
             let area = f.size();
@@ -46,7 +51,7 @@ pub fn run(
             let mut constraints: Vec<Constraint> = vec![];
             if has_msg { constraints.push(Constraint::Length(2)); }
             constraints.push(Constraint::Length(3));
-            if !password.is_empty() { constraints.push(Constraint::Length(3)); }
+            if is_raw_tty && !password.is_empty() { constraints.push(Constraint::Length(3)); }
             constraints.push(Constraint::Length(1));
             let chunks = Layout::default().constraints(constraints).split(inner);
             let footer_idx = chunks.len() - 1;
@@ -60,7 +65,7 @@ pub fn run(
             let style = if password.is_empty() { theme.muted_style } else { theme.accent_style };
             f.render_widget(Paragraph::new(format!("> {}", display)).style(style), ic);
 
-            if !password.is_empty() {
+            if is_raw_tty && !password.is_empty() {
                 f.render_widget(
                     Gauge::default()
                         .gauge_style(Style::default().fg(bar_color).add_modifier(Modifier::BOLD))
@@ -70,7 +75,12 @@ pub fn run(
                 );
             }
 
-            f.render_widget(helpers::footer("Type + Enter:confirm  Esc:cancel  Ctrl+C:quit"), chunks[footer_idx]);
+            let footer_text = if is_raw_tty {
+                "Type + Enter:confirm  Esc:cancel  Ctrl+C:quit"
+            } else {
+                "WARNING: Passwords visible on this terminal.  Enter:confirm  Esc:cancel  Ctrl+C:quit"
+            };
+            f.render_widget(helpers::footer(footer_text), chunks[footer_idx]);
         })?;
 
         match event::read()? {

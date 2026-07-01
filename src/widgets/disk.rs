@@ -121,6 +121,11 @@ fn merge_adjacent_free_space(free: &mut Vec<FreeSpace>) {
     }
 }
 
+fn renumber_partitions(parts: &mut Vec<Partition>) {
+    parts.sort_by_key(|p| start_to_bytes(&p.start));
+    for (i, p) in parts.iter_mut().enumerate() { p.number = (i + 1) as u32; }
+}
+
 fn create_partition_from_free(fs_idx: usize, size_str: &str, parts: &mut Vec<Partition>, free: &mut Vec<FreeSpace>) {
     let size_bytes = human_to_bytes(size_str); if size_bytes == 0 { return; }
     let fs = &free[fs_idx];
@@ -133,6 +138,7 @@ fn create_partition_from_free(fs_idx: usize, size_str: &str, parts: &mut Vec<Par
     if rem > 0 { free[fs_idx].start = bytes_to_human(fs_start + clamped); free[fs_idx].size = bytes_to_human(rem); }
     else { free.remove(fs_idx); }
     merge_adjacent_free_space(free);
+    renumber_partitions(parts);
 }
 
 fn apply_resize(parts: &mut Vec<Partition>, free: &mut Vec<FreeSpace>, idx: usize, new_size: &str) {
@@ -241,7 +247,9 @@ pub fn run(
                                 ConfirmAction::DeletePartition(idx) => {
                                     let p = &partitions[idx];
                                     free_space.push(FreeSpace { start: p.start.clone(), end: p.end.clone(), size: p.size.clone() });
-                                    partitions.remove(idx); merge_adjacent_free_space(&mut free_space);
+                                    partitions.remove(idx);
+                                    merge_adjacent_free_space(&mut free_space);
+                                    renumber_partitions(&mut partitions);
                                     if sel >= partitions.len() && !partitions.is_empty() { sel = partitions.len() - 1; }
                                 }
                                 ConfirmAction::WriteChanges => {
@@ -367,7 +375,6 @@ pub fn run(
     Ok(result)
 }
 
-// ── drawing helpers (unchanged) ───────────────────────────────────────
 fn draw_partition_bar(f: &mut Frame, area: Rect, parts: &[Partition], free: &[FreeSpace]) {
     let tw = area.width.saturating_sub(2) as usize; if tw == 0 { return; }
     if parts.is_empty() && free.len() == 1 {
@@ -416,11 +423,7 @@ fn build_detail(parts: &[Partition], free: &[FreeSpace], idx: usize, theme: &The
     if idx < parts.len() {
         let p = &parts[idx];
         let fs = p.fs_signature.as_deref().unwrap_or("none");
-        let flag_str = if p.flags.is_empty() {
-            "none".to_string()
-        } else {
-            p.flags.join(", ")
-        };
+        let flag_str = if p.flags.is_empty() { "none".to_string() } else { p.flags.join(", ") };
         Line::from(vec![
             Span::styled(format!(" Partition {}  ", p.number), theme.accent_style),
             Span::styled(format!("Type: {}  ", p.ptype), theme.normal_style),
@@ -430,13 +433,8 @@ fn build_detail(parts: &[Partition], free: &[FreeSpace], idx: usize, theme: &The
         ])
     } else if !free.is_empty() {
         let fs = &free[idx - parts.len()];
-        Line::from(vec![
-            Span::styled(" Free space  ", theme.muted_style),
-            Span::styled(format!("Size: {}  ", fs.size), theme.normal_style),
-        ])
-    } else {
-        Line::from(Span::raw(""))
-    }
+        Line::from(vec![Span::styled(" Free space  ", theme.muted_style), Span::styled(format!("Size: {}  ", fs.size), theme.normal_style)])
+    } else { Line::from(Span::raw("")) }
 }
 
 fn draw_type_picker(f: &mut Frame, area: Rect, parts: &[Partition], pi: usize, st: &mut ListState, theme: &Theme) {

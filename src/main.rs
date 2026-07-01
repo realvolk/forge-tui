@@ -1,4 +1,4 @@
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Read, Write};
 use std::fs;
 use std::os::unix::net::UnixListener;
 use std::process;
@@ -22,6 +22,7 @@ fn main() -> Result<()> {
     let mut daemon_mode = false;
     let mut send_mode = false;
     let mut send_json: Option<String> = None;
+    let mut batch_mode = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -32,6 +33,7 @@ fn main() -> Result<()> {
             "--daemon" => { daemon_mode = true; }
             "--send" => { send_mode = true; }
             "--socket" => { i += 1; if i < args.len() { socket_path = Some(args[i].clone()); } }
+            "--batch" => { batch_mode = true; }
             arg if send_mode && send_json.is_none() => { send_json = Some(arg.to_string()); }
             _ => {}
         }
@@ -55,10 +57,61 @@ fn main() -> Result<()> {
         return daemon::run(listener);
     }
 
+    if batch_mode {
+        let path = input_file.unwrap_or_else(|| "/dev/stdin".to_string());
+        let content = if path == "/dev/stdin" {
+            let mut input = String::new();
+            io::stdin().read_to_string(&mut input)?;
+            input
+        } else {
+            fs::read_to_string(&path)?
+        };
+
+        let lines: Vec<&str> = content.lines().collect();
+        let mut stdout = io::stdout();
+
+        for line in lines {
+            let line = line.trim();
+            if line.is_empty() { continue; }
+
+            let request: contract::Request = match serde_json::from_str(line) {
+                Ok(r) => r,
+                Err(e) => {
+                    let resp = contract::Response {
+                        result: None,
+                        cancelled: true,
+                        error: Some(format!("Invalid request JSON: {}", e)),
+                    };
+                    writeln!(stdout, "{}", serde_json::to_string(&resp)?)?;
+                    stdout.flush()?;
+                    continue;
+                }
+            };
+
+            match widgets::dispatch(request, None) {
+                Ok(response) => {
+                    writeln!(stdout, "{}", serde_json::to_string(&response)?)?;
+                    stdout.flush()?;
+                }
+                Err(e) => {
+                    let resp = contract::Response {
+                        result: None,
+                        cancelled: true,
+                        error: Some(format!("{}", e)),
+                    };
+                    writeln!(stdout, "{}", serde_json::to_string(&resp)?)?;
+                    stdout.flush()?;
+                }
+            }
+        }
+        return Ok(());
+    }
+
     if mode.as_deref() != Some("widget") {
         eprintln!("Usage: forge-tui --mode widget [--input <file>] [--output <file>]");
         eprintln!("       forge-tui --daemon [--socket <path>]");
         eprintln!("       forge-tui --send '<json>' [--socket <path>]");
+        eprintln!("       forge-tui --batch [--input <file>]");
         process::exit(1);
     }
 
