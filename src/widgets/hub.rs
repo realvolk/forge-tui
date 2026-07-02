@@ -400,6 +400,15 @@ fn dispatch_item_edit(
     let current_val = values.get(&item.id).cloned().unwrap_or_default();
 
     match item.widget.as_str() {
+        "kernel_picker" => {
+            let new_val = crate::artixforge::install::kernel::run(term, &current_val)?;
+            Ok(Some(new_val))
+        }
+        "user_manager" => {
+            let new_val = crate::artixforge::install::users::run(term, &current_val)?;
+            Ok(new_val)
+        }
+
         "menu" | "disk_picker" => {
             let choices: Vec<String> = if item.disk_picker {
                 get_disks()

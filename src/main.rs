@@ -11,6 +11,7 @@ mod theme;
 mod tty;
 mod watermark;
 mod widgets;
+mod artixforge;
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
