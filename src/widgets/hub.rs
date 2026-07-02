@@ -1,7 +1,7 @@
 use crate::contract::Response;
 use crate::layout;
 use crate::theme::Theme;
-use crate::widgets::{self, helpers};
+use crate::widgets;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
@@ -28,7 +28,6 @@ struct Item {
     visible_if: HashMap<String, String>,
     display: String,
     disk_picker: bool,
-    choices_from: String,
 }
 
 #[derive(Debug, Clone)]
@@ -52,8 +51,6 @@ struct HubState {
     item_idx: usize,
     values: HashMap<String, String>,
     mode: HubMode,
-    edit_buffer: String,
-    edit_list_state: ListState,
 }
 
 pub fn run(
@@ -87,7 +84,9 @@ pub fn run(
                         .and_then(|v| v.as_object())
                         .map(|o| {
                             o.iter()
-                                .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+                                .map(|(k, v)| {
+                                    (k.clone(), v.as_str().unwrap_or("").to_string())
+                                })
                                 .collect()
                         })
                         .unwrap_or_default();
@@ -114,10 +113,6 @@ pub fn run(
                         visible_if,
                         display: item_val["display"].as_str().unwrap_or("").to_string(),
                         disk_picker: item_val["disk_picker"].as_bool().unwrap_or(false),
-                        choices_from: item_val["choices_from"]
-                            .as_str()
-                            .unwrap_or("")
-                            .to_string(),
                     });
                 }
             }
@@ -136,8 +131,6 @@ pub fn run(
         item_idx: 0,
         values: initial_values,
         mode: HubMode::Browsing,
-        edit_buffer: String::new(),
-        edit_list_state: ListState::default(),
     };
 
     let mut owned;
@@ -203,7 +196,6 @@ pub fn run(
                 .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
                 .split(main_chunks[0]);
 
-            /* Left panel – categories */
             let cat_items: Vec<ListItem> = state
                 .categories
                 .iter()
@@ -233,7 +225,6 @@ pub fn run(
                 &mut cat_list_state,
             );
 
-            /* Right panel – items */
             let item_lines: Vec<Line> = visible_items
                 .iter()
                 .enumerate()
@@ -251,7 +242,7 @@ pub fn run(
                         } else {
                             "set".to_string()
                         }
-                    } else if item.widget == "disk_picker" {
+                    } else if item.disk_picker {
                         let short = val.rsplit('/').next().unwrap_or(&val).to_string();
                         format!("{} ({})", short, val)
                     } else {
@@ -269,7 +260,6 @@ pub fn run(
                 panels[1],
             );
 
-            /* Footer with actions and hints */
             let action_text = actions
                 .iter()
                 .enumerate()
@@ -342,6 +332,21 @@ pub fn run(
                 }
                 KeyCode::Enter => {
                     if let Some(item) = visible_items.get(state.item_idx).cloned() {
+                        let widget_type = item.widget.clone();
+                        if widget_type == "kernel_picker"
+                            || widget_type == "user_manager"
+                        {
+                            let map: serde_json::Map<String, Value> = state
+                                .values
+                                .iter()
+                                .map(|(k, v)| (k.clone(), Value::String(v.clone())))
+                                .collect();
+                            break Response {
+                                result: Some(Value::Object(map)),
+                                cancelled: false,
+                                error: None,
+                            };
+                        }
                         state.mode = HubMode::EditingItem;
                     }
                 }
@@ -395,7 +400,7 @@ fn dispatch_item_edit(
     let current_val = values.get(&item.id).cloned().unwrap_or_default();
 
     match item.widget.as_str() {
-        "menu" | "kernel_picker" | "disk_picker" => {
+        "menu" | "disk_picker" => {
             let choices: Vec<String> = if item.disk_picker {
                 get_disks()
             } else {
@@ -477,11 +482,7 @@ fn dispatch_item_edit(
         }
 
         "multiselect" => {
-            let choices = if !item.choices_from.is_empty() {
-                vec!["placeholder".into()]
-            } else {
-                item.choices.clone()
-            };
+            let choices = item.choices.clone();
             let resp = widgets::multiselect::run(
                 Some(term),
                 item.label.clone(),
@@ -505,40 +506,26 @@ fn dispatch_item_edit(
             }
         }
 
-        "disk" => {
-            let partitions = serde_json::Value::Array(vec![]);
-            let free_space = serde_json::Value::Array(vec![serde_json::json!({
-                "start": "0",
-                "end": "0",
-                "size": "0"
-            })]);
-            let resp = widgets::disk::run(
-                Some(term),
-                item.label.clone(),
-                item.value.clone(),
-                partitions,
-                Some(free_space),
-                None,
-            )?;
-            if resp.cancelled {
-                Ok(None)
-            } else {
-                Ok(resp.result.map(|v| v.to_string()))
-            }
-        }
-
         _ => Ok(None),
     }
 }
 
 fn get_disks() -> Vec<String> {
     if let Ok(output) = std::process::Command::new("lsblk")
-        .args(&["-dpno", "NAME"])
+        .args(&["-dpno", "NAME,SIZE,MODEL", "-e", "7"])
         .output()
     {
         let s = String::from_utf8_lossy(&output.stdout);
-        s.lines().map(|l| l.trim().to_string()).collect()
+        s.lines()
+            .map(|l| {
+                let parts: Vec<&str> = l.splitn(3, ' ').collect();
+                let name = parts.first().unwrap_or(&"");
+                let size = parts.get(1).unwrap_or(&"");
+                let model = parts.get(2).unwrap_or(&"Unknown");
+                format!("{} - {} ({})", name, size, model)
+            })
+            .collect()
     } else {
-        vec!["/dev/sda".into(), "/dev/nvme0n1".into()]
+        vec!["/dev/sda - 0 (Unknown)".into()]
     }
 }
