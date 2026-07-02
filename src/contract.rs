@@ -184,6 +184,28 @@ pub enum Request {
         #[serde(default)]
         total: Option<u16>,
     },
+    #[serde(rename = "hub")]
+    Hub {
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        categories: Value,
+        #[serde(default)]
+        actions: Vec<String>,
+        #[serde(default)]
+        step: Option<u16>,
+        #[serde(default)]
+        total: Option<u16>,
+    },
+    #[serde(rename = "file_picker")]
+    FilePicker {
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        start_dir: Option<String>,
+        #[serde(default)]
+        filter: Option<String>,
+    },
     #[serde(rename = "quit")]
     Quit,
 }
@@ -203,6 +225,8 @@ impl Request {
             Request::Text { step, .. } => step.unwrap_or(0),
             Request::Disk { step, .. } => step.unwrap_or(0),
             Request::Multiselect { step, .. } => step.unwrap_or(0),
+            Request::Hub { step, .. } => step.unwrap_or(0),
+            Request::FilePicker { .. } => 0,
             Request::Quit => 0,
         }
     }
@@ -221,6 +245,8 @@ impl Request {
             Request::Text { total, .. } => total.unwrap_or(0),
             Request::Disk { total, .. } => total.unwrap_or(0),
             Request::Multiselect { total, .. } => total.unwrap_or(0),
+            Request::Hub { total, .. } => total.unwrap_or(0),
+            Request::FilePicker { .. } => 0,
             Request::Quit => 0,
         }
     }

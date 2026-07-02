@@ -1,7 +1,9 @@
 pub mod checklist;
 pub mod disk;
+pub mod file_picker;
 pub mod filter;
 pub mod helpers;
+pub mod hub;
 pub mod input;
 pub mod menu;
 pub mod msg;
@@ -55,6 +57,12 @@ pub fn dispatch(request: Request, terminal: Option<&mut Terminal<CrosstermBacken
         }
         Request::Disk { title, disk, partitions, free_space, readonly, step: _, total: _ } => {
             disk::run(terminal, title, disk, partitions, free_space, readonly)
+        }
+        Request::Hub { title, categories, actions, step: _, total: _ } => {
+            hub::run(terminal, title, categories, actions)
+        }
+        Request::FilePicker { title, start_dir, filter } => {
+            file_picker::run(terminal, title, start_dir, filter)
         }
         Request::Quit => Ok(Response { result: None, cancelled: false, error: None }),
     }
