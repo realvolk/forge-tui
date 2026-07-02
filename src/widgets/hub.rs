@@ -6,8 +6,8 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Alignment, Constraint, Layout, Margin, Rect},
-    style::{Modifier, Style},
+    layout::{Alignment, Constraint, Layout, Margin},
+    style::Modifier,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
     Terminal, Frame,
@@ -514,7 +514,44 @@ fn dispatch_item_edit(
                 Ok(joined)
             }
         }
-
+        "stage3_picker" => {
+            let val = crate::gforge::install::stage3::run(term, &current_val)?;
+            Ok(val)
+        }
+        "profile_picker" => {
+            let val = crate::gforge::install::profile::run(term, &current_val)?;
+            Ok(val)
+        }
+        "use_flags" => {
+            let val = crate::gforge::install::use_flags::run(term, &current_val)?;
+            Ok(val)
+        }
+        "cflags" => {
+            let makeopts = values.get("GENTOO_MAKEOPTS").cloned().unwrap_or_default();
+            let rustflags = values.get("GENTOO_RUSTFLAGS").cloned().unwrap_or_default();
+            let (cflags, makeopts, rustflags) = crate::gforge::install::cflags::run(term, &current_val, &makeopts, &rustflags)?;
+            Ok(Some(format!("CFLAGS={} MAKEOPTS={} RUSTFLAGS={}", cflags, makeopts, rustflags)))
+        }
+        "licenses" => {
+            let val = crate::gforge::install::portage::run_licenses(term, &current_val)?;
+            Ok(val)
+        }
+        "mirrors" => {
+            let val = crate::gforge::install::portage::run_mirrors(term, &current_val)?;
+            Ok(val)
+        }
+        "features" => {
+            let val = crate::gforge::install::portage::run_features(term, &current_val)?;
+            Ok(val)
+        }
+        "accept_keywords" => {
+            let val = crate::gforge::install::portage::run_accept_keywords(term, &current_val)?;
+            Ok(val)
+        }
+        "overlays" => {
+            let val = crate::gforge::install::portage::run_overlays(term, &current_val)?;
+            Ok(val)
+        }
         _ => Ok(None),
     }
 }

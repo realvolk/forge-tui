@@ -22,7 +22,7 @@ pub fn run(
     let wm = values.get("WM_DE").map_or("", |v| v);
     let luks = values.get("USE_LUKS").map_or("", |v| v);
     let lvm = values.get("USE_LVM").map_or("", |v| v);
-    let uki = values.get("GENERATE_UKI").map_or("", |v| v);
+    let _uki = values.get("GENERATE_UKI").map_or("", |v| v);
     let arch = values.get("ENABLE_ARCH_REPOS").map_or("", |v| v);
     let xstack = values.get("X_STACK").map_or("", |v| v);
     let dm = values.get("DISPLAY_MANAGER").map_or("", |v| v);

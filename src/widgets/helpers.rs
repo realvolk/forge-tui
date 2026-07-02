@@ -39,7 +39,7 @@ pub fn is_confirm(key: &Event) -> bool {
     matches!(key, Event::Key(k) if k.code == KeyCode::Enter)
 }
 
-pub fn footer(text: &str) -> Paragraph {
+pub fn footer(text: &str) -> Paragraph<'_> {
     Paragraph::new(Line::from(Span::styled(
         format!(" {} ", text),
         crate::theme::Theme::load().muted_style,

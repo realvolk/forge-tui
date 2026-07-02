@@ -1,4 +1,3 @@
-use crate::contract::Response;
 use crate::widgets;
 use anyhow::Result;
 use ratatui::{backend::CrosstermBackend, Terminal};

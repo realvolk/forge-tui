@@ -61,7 +61,7 @@ pub fn run(
         "users".into(),
     ];
 
-    let result = loop {
+    let _result = loop {
         term.draw(|f: &mut Frame| {
             let area = f.size();
             if let Some(ref wm) = theme.watermark_path {

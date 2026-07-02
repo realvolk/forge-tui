@@ -7,9 +7,8 @@ use crossterm::event::{self, Event, KeyCode, MouseEventKind};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Layout, Margin},
-    style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState},
     Terminal, Frame,
 };
 use std::fs;
