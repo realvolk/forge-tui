@@ -78,6 +78,9 @@ pub fn run(
             if let Some(items_arr) = cat_val["items"].as_array() {
                 for item_val in items_arr {
                     let id = item_val["id"].as_str().unwrap_or("").to_string();
+                    if id.is_empty() {
+                        continue;
+                    }
                     let value = item_val["value"].as_str().unwrap_or("").to_string();
                     let visible_if: HashMap<String, String> = item_val
                         .get("visible_if")
@@ -243,8 +246,14 @@ pub fn run(
                             "set".to_string()
                         }
                     } else if item.disk_picker {
-                        let short = val.rsplit('/').next().unwrap_or(&val).to_string();
-                        format!("{} ({})", short, val)
+                        if val.is_empty() {
+                            "(none)".to_string()
+                        } else {
+                            let short = val.rsplit('/').next().unwrap_or(&val).to_string();
+                            format!("{} ({})", short, val)
+                        }
+                    } else if val.is_empty() {
+                        "(none)".to_string()
                     } else {
                         val
                     };
@@ -267,7 +276,7 @@ pub fn run(
                 .collect::<Vec<_>>()
                 .join("  ");
             let footer = format!(
-                "{}   j/k:nav  Tab:switch  Enter:edit  Esc:quit",
+                "{}   j/k:items  h/l:categories  Tab:next  Enter:edit  Esc:quit",
                 action_text
             );
             f.render_widget(
@@ -321,14 +330,20 @@ pub fn run(
                     }
                 }
                 KeyCode::Left | KeyCode::Char('h') => {
-                    state.cat_idx = state.cat_idx.saturating_sub(1);
+                    if state.cat_idx > 0 {
+                        state.cat_idx -= 1;
+                    } else {
+                        state.cat_idx = state.categories.len().saturating_sub(1);
+                    }
                     state.item_idx = 0;
                 }
                 KeyCode::Right | KeyCode::Char('l') | KeyCode::Tab => {
                     if state.cat_idx + 1 < state.categories.len() {
                         state.cat_idx += 1;
-                        state.item_idx = 0;
+                    } else {
+                        state.cat_idx = 0;
                     }
+                    state.item_idx = 0;
                 }
                 KeyCode::Enter => {
                     if let Some(item) = visible_items.get(state.item_idx).cloned() {
@@ -339,6 +354,7 @@ pub fn run(
                             let map: serde_json::Map<String, Value> = state
                                 .values
                                 .iter()
+                                .filter(|(k, _)| !k.is_empty())
                                 .map(|(k, v)| (k.clone(), Value::String(v.clone())))
                                 .collect();
                             break Response {
@@ -355,6 +371,7 @@ pub fn run(
                         let map: serde_json::Map<String, Value> = state
                             .values
                             .iter()
+                            .filter(|(k, _)| !k.is_empty())
                             .map(|(k, v)| (k.clone(), Value::String(v.clone())))
                             .collect();
                         break Response {
