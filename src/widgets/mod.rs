@@ -82,6 +82,9 @@ pub fn dispatch(request: Request, terminal: Option<&mut Terminal<CrosstermBacken
         Request::PowerUser { title, categories } => {
             crate::artixforge::poweruser::hub::run(terminal, title, categories)
         }
+        Request::InstallHub { title, categories, actions, boot_mode } => {
+            crate::artixforge::install::hub::run(terminal, title, categories, actions, boot_mode)
+        }
         Request::Quit => Ok(Response { result: None, cancelled: false, error: None }),
     }
 }

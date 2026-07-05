@@ -250,6 +250,17 @@ pub enum Request {
         #[serde(default)]
         categories: Value,
     },
+    #[serde(rename = "install_hub")]
+    InstallHub {
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        categories: Value,
+        #[serde(default)]
+        actions: Vec<String>,
+        #[serde(default)]
+        boot_mode: String,
+    },
     #[serde(rename = "quit")]
     Quit,
 }
@@ -277,6 +288,7 @@ impl Request {
             Request::MigrationDesktop { .. } => 0,
             Request::Anvil { .. } => 0,
             Request::PowerUser { .. } => 0,
+            Request::InstallHub { .. } => 0,
             Request::Quit => 0,
         }
     }
@@ -303,6 +315,7 @@ impl Request {
             Request::MigrationDesktop { .. } => 0,
             Request::Anvil { .. } => 0,
             Request::PowerUser { .. } => 0,
+            Request::InstallHub { .. } => 0,
             Request::Quit => 0,
         }
     }
