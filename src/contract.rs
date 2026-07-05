@@ -206,6 +206,50 @@ pub enum Request {
         #[serde(default)]
         filter: Option<String>,
     },
+    #[serde(rename = "recovery")]
+    Recovery {
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        status: Value,
+        #[serde(default)]
+        repairs: Vec<Value>,
+    },
+    #[serde(rename = "iso")]
+    Iso {
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        categories: Value,
+    },
+    #[serde(rename = "migration_init")]
+    MigrationInit {
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        current_init: String,
+    },
+    #[serde(rename = "migration_desktop")]
+    MigrationDesktop {
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        current_de: String,
+    },
+    #[serde(rename = "anvil")]
+    Anvil {
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        actions: Value,
+    },
+    #[serde(rename = "poweruser")]
+    PowerUser {
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        categories: Value,
+    },
     #[serde(rename = "quit")]
     Quit,
 }
@@ -227,6 +271,12 @@ impl Request {
             Request::Multiselect { step, .. } => step.unwrap_or(0),
             Request::Hub { step, .. } => step.unwrap_or(0),
             Request::FilePicker { .. } => 0,
+            Request::Recovery { .. } => 0,
+            Request::Iso { .. } => 0,
+            Request::MigrationInit { .. } => 0,
+            Request::MigrationDesktop { .. } => 0,
+            Request::Anvil { .. } => 0,
+            Request::PowerUser { .. } => 0,
             Request::Quit => 0,
         }
     }
@@ -247,6 +297,12 @@ impl Request {
             Request::Multiselect { total, .. } => total.unwrap_or(0),
             Request::Hub { total, .. } => total.unwrap_or(0),
             Request::FilePicker { .. } => 0,
+            Request::Recovery { .. } => 0,
+            Request::Iso { .. } => 0,
+            Request::MigrationInit { .. } => 0,
+            Request::MigrationDesktop { .. } => 0,
+            Request::Anvil { .. } => 0,
+            Request::PowerUser { .. } => 0,
             Request::Quit => 0,
         }
     }

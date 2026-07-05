@@ -64,6 +64,24 @@ pub fn dispatch(request: Request, terminal: Option<&mut Terminal<CrosstermBacken
         Request::FilePicker { title, start_dir, filter } => {
             file_picker::run(terminal, title, start_dir, filter)
         }
+        Request::Recovery { title, status, repairs } => {
+            crate::artixforge::recovery::hub::run(terminal, title, status, repairs)
+        }
+        Request::Iso { title, categories } => {
+            crate::artixforge::iso::hub::run(terminal, title, categories)
+        }
+        Request::MigrationInit { title, current_init } => {
+            crate::artixforge::migration::init::run(terminal, title, current_init)
+        }
+        Request::MigrationDesktop { title, current_de } => {
+            crate::artixforge::migration::desktop::run(terminal, title, current_de)
+        }
+        Request::Anvil { title, actions } => {
+            crate::artixforge::anvil::hub::run(terminal, title, actions)
+        }
+        Request::PowerUser { title, categories } => {
+            crate::artixforge::poweruser::hub::run(terminal, title, categories)
+        }
         Request::Quit => Ok(Response { result: None, cancelled: false, error: None }),
     }
 }
