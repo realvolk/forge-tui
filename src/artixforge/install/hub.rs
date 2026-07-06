@@ -215,6 +215,28 @@ pub fn run(
                     "user_manager" => {
                         crate::artixforge::install::users::run(term, &current_val)
                     }
+                    "menu" if item.id == "GUM_TITLE_COLOR" => {
+                        let choices = item.choices.clone();
+                        let default = if choices.contains(&current_val) { Some(current_val) } else { choices.first().cloned() };
+                        let resp = widgets::menu::run(Some(term), item.label.clone(), String::new(),
+                            Value::Array(choices.iter().map(|c| Value::String(c.clone())).collect()), default, None)?;
+                        if resp.cancelled {
+                            Ok(None)
+                        } else {
+                            let name = resp.result.and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
+                            let (title_code, accent_code) = match name.as_str() {
+                                "Forge (pink/blue)" => ("212", "34"),
+                                "Artix (blue)" => ("39", "117"),
+                                "Jet Black (grey)" => ("245", "250"),
+                                "Mono (white)" => ("250", "255"),
+                                "Retro (yellow)" => ("3", "11"),
+                                _ => ("212", "34"),
+                            };
+                            state.values.insert("GUM_TITLE_COLOR".to_string(), title_code.to_string());
+                            state.values.insert("GUM_ACCENT_COLOR".to_string(), accent_code.to_string());
+                            Ok(Some(name))
+                        }
+                    }
                     "menu" | "disk_picker" => {
                         let choices: Vec<String> = if item.disk_picker { get_disks() } else { item.choices.clone() };
                         let default = if choices.contains(&current_val) { Some(current_val) } else { choices.first().cloned() };
@@ -226,6 +248,26 @@ pub fn run(
                         let resp = widgets::input::run(Some(term), item.label.clone(), String::new(),
                             Some(current_val), Some(item.placeholder.clone()), None)?;
                         if resp.cancelled { Ok(None) } else { Ok(resp.result.and_then(|v| v.as_str().map(String::from))) }
+                    }
+                    "filter" => {
+                        let choices: Vec<String> = match item.id.as_str() {
+                            "TIMEZONE" => get_timezones(),
+                            "LOCALE" => get_locales(),
+                            "KEYMAP" => get_keymaps(),
+                            _ => item.choices.clone(),
+                        };
+                        let resp = widgets::filter::run(
+                            Some(term),
+                            item.label.clone(),
+                            String::new(),
+                            choices,
+                            Some(item.placeholder.clone()),
+                        )?;
+                        if resp.cancelled {
+                            Ok(None)
+                        } else {
+                            Ok(resp.result.and_then(|v| v.as_str().map(String::from)))
+                        }
                     }
                     "yesno" => {
                         let default_yes = current_val == "yes";
@@ -344,4 +386,31 @@ fn get_disks() -> Vec<String> {
     } else {
         vec!["/dev/sda - 0 (Unknown)".into()]
     }
+}
+
+fn get_timezones() -> Vec<String> {
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg("find /usr/share/zoneinfo -type f 2>/dev/null | sed 's|/usr/share/zoneinfo/||' | grep -v '^posix\\|^right\\|^Etc\\|\\.tab$' | sort")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().map(|l| l.to_string()).collect())
+        .unwrap_or_default()
+}
+
+fn get_locales() -> Vec<String> {
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg("grep -E '^#?[a-z]{2}_[A-Z]{2}.*UTF-8' /etc/locale.gen 2>/dev/null | sed 's/^#//' | awk '{print $1}' | sort -u")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().map(|l| l.to_string()).collect())
+        .unwrap_or_default()
+}
+
+fn get_keymaps() -> Vec<String> {
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg("localectl list-keymaps 2>/dev/null || find /usr/share/kbd/keymaps -name '*.map.gz' 2>/dev/null | sed 's|.*/||; s|\\.map\\.gz||' | sort -u")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().map(|l| l.to_string()).collect())
+        .unwrap_or_default()
 }
