@@ -275,18 +275,16 @@ pub fn run(
                     "password" => {
                         if item.id == "ROOT_PASS" {
                             let pass1 = widgets::password::run(Some(term), "Root Password".into(), "Enter root password:".into(), None)?;
-                            if pass1.cancelled { return Ok(None); }
-                            let pass2 = widgets::password::run(Some(term), "Root Password".into(), "Confirm password:".into(), None)?;
-                            if pass2.cancelled { return Ok(None); }
-                            let p1 = pass1.result.and_then(|v| v.as_str().map(String::from));
-                            let p2 = pass2.result.and_then(|v| v.as_str().map(String::from));
-                            if p1 == p2 { Ok(p1) } else { Ok(None) }
-                        } else {
-                            let resp = widgets::password::run(Some(term), item.label.clone(), String::new(),
-                                Some(if current_val.is_empty() { "Enter password".into() } else { "".into() }))?;
-                            if resp.cancelled { Ok(None) } else { Ok(resp.result.and_then(|v| v.as_str().map(String::from))) }
-                        }
-                    }
+                            if pass1.cancelled { Ok(None) }
+                            else {
+                                let pass2 = widgets::password::run(Some(term), "Root Password".into(), "Confirm password:".into(), None)?;
+                                if pass2.cancelled { Ok(None) }
+                                else {
+                                    let p1 = pass1.result.and_then(|v| v.as_str().map(String::from));
+                                    let p2 = pass2.result.and_then(|v| v.as_str().map(String::from));
+                                    if p1 == p2 { Ok(p1) } else { Ok(None) }
+                                }
+                            }
                     "multiselect" => {
                         let choices: Vec<String> = if item.id == "EXTRAS" {
                             get_extras_choices()
