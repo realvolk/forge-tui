@@ -19,6 +19,16 @@ pub fn run(
     message: String,
     placeholder: Option<String>,
 ) -> Result<Response> {
+    run_with_background(terminal, title, message, placeholder, None)
+}
+
+pub fn run_with_background(
+    terminal: Option<&mut Terminal<CrosstermBackend<File>>>,
+    title: String,
+    message: String,
+    placeholder: Option<String>,
+    background: Option<&dyn Fn(&mut Frame)>,
+) -> Result<Response> {
     let is_daemon = terminal.is_some();
     let theme = Theme::load();
     let mut password = String::new();
@@ -45,7 +55,7 @@ pub fn run(
         term.draw(|f: &mut Frame| {
             let area = f.size();
             if let Some(ref wm) = theme.watermark_path { crate::watermark::render(f, area, wm); }
-            let inner = helpers::render_box(f, area, &title);
+            let inner = helpers::render_overlay(f, area, &title, 50, 40, background);
 
             let has_msg = !message.is_empty();
             let mut constraints: Vec<Constraint> = vec![];

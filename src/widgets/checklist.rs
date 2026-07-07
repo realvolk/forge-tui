@@ -22,6 +22,20 @@ pub fn run(
     max: Option<usize>,
     default: Option<Vec<String>>,
 ) -> Result<Response> {
+    run_with_background(terminal, title, message, choices, _height, min, max, default, None)
+}
+
+pub fn run_with_background(
+    terminal: Option<&mut Terminal<CrosstermBackend<File>>>,
+    title: String,
+    message: String,
+    choices: Vec<String>,
+    _height: Option<u16>,
+    min: Option<usize>,
+    max: Option<usize>,
+    default: Option<Vec<String>>,
+    background: Option<&dyn Fn(&mut Frame)>,
+) -> Result<Response> {
     let is_daemon = terminal.is_some();
     let theme = Theme::load();
     let default_set: HashSet<String> = default.unwrap_or_default().into_iter().collect();
@@ -45,7 +59,9 @@ pub fn run(
         term.draw(|f: &mut Frame| {
             let area = f.size();
             if let Some(ref wm) = theme.watermark_path { crate::watermark::render(f, area, wm); }
-            let inner = helpers::render_box(f, area, &title);
+            let width_pct = if choices.len() <= 5 { 50 } else { 70 };
+            let height_pct = if choices.len() <= 5 { 50 } else { 75 };
+            let inner = helpers::render_overlay(f, area, &title, width_pct, height_pct, background);
 
             let has_msg = !message.is_empty();
             let constraints: Vec<Constraint> = if has_msg {

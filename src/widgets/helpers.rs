@@ -64,6 +64,33 @@ pub fn render_box(f: &mut Frame, area: Rect, title: &str) -> Rect {
     box_area.inner(&ratatui::layout::Margin::new(2, 1))
 }
 
+pub fn render_overlay(
+    f: &mut Frame,
+    area: Rect,
+    title: &str,
+    width_pct: u16,
+    height_pct: u16,
+    background: Option<&dyn Fn(&mut Frame)>,
+) -> Rect {
+    if let Some(bg) = background {
+        bg(f);
+    }
+    use crate::layout;
+    use crate::theme::Theme;
+    use ratatui::widgets::{Block, Borders};
+
+    let theme = Theme::load();
+    let box_area = layout::centered(width_pct, height_pct, area);
+    f.render_widget(Clear, box_area);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(theme.border_style)
+        .title(title)
+        .title_style(theme.title_style);
+    f.render_widget(block, box_area);
+    box_area.inner(&ratatui::layout::Margin::new(2, 1))
+}
+
 pub fn enable_mouse() -> Result<()> {
     crossterm::execute!(io::stdout(), crossterm::event::EnableMouseCapture)?;
     Ok(())
