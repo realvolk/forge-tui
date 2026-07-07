@@ -210,7 +210,8 @@ pub fn run(
                 let current_val = state.values.get(&item.id).cloned().unwrap_or_default();
                 let result = match item.widget.as_str() {
                     "kernel_picker" => {
-                        crate::artixforge::install::kernel::run(term, &current_val).map(Some)
+                        let new_val = crate::artixforge::install::kernel::run_with_values(term, &current_val, &mut state.values)?;
+                        Ok(Some(new_val))
                     }
                     "user_manager" => {
                         crate::artixforge::install::users::run(term, &current_val)

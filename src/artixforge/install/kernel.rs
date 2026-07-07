@@ -2,9 +2,23 @@ use crate::widgets;
 use anyhow::Result;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::fs::File;
 
 pub fn run(term: &mut Terminal<CrosstermBackend<File>>, current_value: &str) -> Result<String> {
+    let mut dummy_values = HashMap::new();
+    pick_inner(term, current_value, &mut dummy_values)
+}
+
+pub fn run_with_values(term: &mut Terminal<CrosstermBackend<File>>, current_value: &str, values: &mut HashMap<String, String>) -> Result<String> {
+    pick_inner(term, current_value, values)
+}
+
+fn pick_inner(
+    term: &mut Terminal<CrosstermBackend<File>>,
+    current_value: &str,
+    values: &mut HashMap<String, String>,
+) -> Result<String> {
     let category = widgets::menu::run(
         Some(term),
         "Kernel".into(),
@@ -33,15 +47,15 @@ pub fn run(term: &mut Terminal<CrosstermBackend<File>>, current_value: &str) -> 
     match choice.as_str() {
         "linux-* (standard)" => pick_standard(term, current_value),
         "linux-cachyos-*" => pick_cachyos(term, current_value),
-        "tkg" => pick_tkg(term, current_value),
+        "tkg" => {
+            crate::artixforge::install::tkg::run(term, values)?;
+            Ok("tkg".to_string())
+        }
         other => Ok(other.to_string()),
     }
 }
 
-fn pick_standard(
-    term: &mut Terminal<CrosstermBackend<File>>,
-    current: &str,
-) -> Result<String> {
+fn pick_standard(term: &mut Terminal<CrosstermBackend<File>>, current: &str) -> Result<String> {
     let resp = widgets::menu::run(
         Some(term),
         "Standard Kernel".into(),
@@ -58,17 +72,11 @@ fn pick_standard(
     if resp.cancelled {
         Ok(current.to_string())
     } else {
-        Ok(resp
-            .result
-            .and_then(|v| v.as_str().map(String::from))
-            .unwrap_or_default())
+        Ok(resp.result.and_then(|v| v.as_str().map(String::from)).unwrap_or_default())
     }
 }
 
-fn pick_cachyos(
-    term: &mut Terminal<CrosstermBackend<File>>,
-    current: &str,
-) -> Result<String> {
+fn pick_cachyos(term: &mut Terminal<CrosstermBackend<File>>, current: &str) -> Result<String> {
     let resp = widgets::menu::run(
         Some(term),
         "CachyOS Kernel".into(),
@@ -90,44 +98,7 @@ fn pick_cachyos(
     if resp.cancelled {
         Ok(current.to_string())
     } else {
-        let val = resp
-            .result
-            .and_then(|v| v.as_str().map(String::from))
-            .unwrap_or_default();
+        let val = resp.result.and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
         Ok(val.split(' ').next().unwrap_or(&val).to_string())
     }
-}
-
-fn pick_tkg(
-    term: &mut Terminal<CrosstermBackend<File>>,
-    current: &str,
-) -> Result<String> {
-    let sched = widgets::menu::run(
-        Some(term),
-        "TKG Scheduler".into(),
-        "Select CPU scheduler:".into(),
-        Value::Array(vec![
-            Value::String("eevdf (default)".into()),
-            Value::String("bmq".into()),
-            Value::String("bore".into()),
-            Value::String("pds".into()),
-        ]),
-        None,
-        None,
-    )?;
-    if sched.cancelled {
-        return Ok(current.to_string());
-    }
-
-    let binary = widgets::yesno::run(
-        Some(term),
-        "TKG Build".into(),
-        "Use prebuilt binary?\n\nYes = download (~50MB)\nNo = compile (~30 min)".into(),
-        Some(true),
-    )?;
-    if binary.cancelled {
-        return Ok(current.to_string());
-    }
-
-    Ok("tkg".to_string())
 }
