@@ -164,11 +164,10 @@ pub fn run(
                 .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
                 .split(main_chunks[0]);
 
-            // Left: categories
             let cat_items: Vec<ListItem> = state.categories.iter().enumerate().map(|(i, cat)| {
                 let is_sel = i == state.cat_idx;
                 let style = if is_sel { theme.selected_style } else { theme.normal_style };
-                let summary = render_summary(&cat.summary_template, &state.values);
+                let summary = format!(" {}", render_summary(&cat.summary_template, &state.values));
                 ListItem::new(Line::from(vec![
                     Span::styled(cat.label.clone() + "\n", style.add_modifier(Modifier::BOLD)),
                     Span::styled(summary, theme.muted_style),
@@ -177,16 +176,26 @@ pub fn run(
             let mut cat_list = ListState::default().with_selected(Some(state.cat_idx));
             f.render_stateful_widget(List::new(cat_items).highlight_style(theme.selected_style), panels[0], &mut cat_list);
 
-            // Right: items
             let item_lines: Vec<Line> = visible_items.iter().enumerate().map(|(i, item)| {
                 let is_sel = i == state.item_idx && state.mode == HubMode::Browsing;
                 let style = if is_sel { theme.selected_style } else { theme.normal_style };
                 let val = state.values.get(&item.id).cloned().unwrap_or_default();
                 let display_val = if item.display == "set/not set" {
                     if val.is_empty() { "not set".to_string() } else { "set".to_string() }
+                } else if item.widget == "user_manager" {
+                    if val.is_empty() || val == "0" {
+                        "No users".to_string()
+                    } else {
+                        if let Ok(users) = serde_json::from_str::<Vec<serde_json::Value>>(&val) {
+                            if users.is_empty() { "No users".to_string() }
+                            else {
+                                let first = users[0].get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                                format!("{} user(s), e.g. {}", users.len(), first)
+                            }
+                        } else { "Users configured".to_string() }
+                    }
                 } else if item.disk_picker {
-                    if val.is_empty() { "(none)".to_string() }
-                    else { let short = val.rsplit('/').next().unwrap_or(&val).to_string(); format!("{} ({})", short, val) }
+                    if val.is_empty() { "(none)".to_string() } else { val }
                 } else if val.is_empty() { "(none)".to_string() } else { val };
                 Line::from(vec![
                     Span::styled(format!(" {}: ", item.label), style),
@@ -195,7 +204,6 @@ pub fn run(
             }).collect();
             f.render_widget(Paragraph::new(item_lines).block(Block::default().borders(Borders::LEFT)), panels[1]);
 
-            // Footer
             let action_text = actions.iter().enumerate().map(|(i, a)| format!("F{}:{}", i+1, a)).collect::<Vec<_>>().join("  ");
             let footer = format!("{}   j/k:items  h/l:categories  Tab:next  Enter:edit  Esc:cancel", action_text);
             f.render_widget(
@@ -204,14 +212,12 @@ pub fn run(
             );
         })?;
 
-        // Editing mode
         if state.mode == HubMode::EditingItem {
             if let Some(item) = visible_items.get(state.item_idx).cloned() {
                 let current_val = state.values.get(&item.id).cloned().unwrap_or_default();
                 let result = match item.widget.as_str() {
                     "kernel_picker" => {
-                        let new_val = crate::artixforge::install::kernel::run_with_values(term, &current_val, &mut state.values)?;
-                        Ok(Some(new_val))
+                        crate::artixforge::install::kernel::run_with_values(term, &current_val, &mut state.values).map(|v| Some(v))
                     }
                     "user_manager" => {
                         crate::artixforge::install::users::run(term, &current_val)
@@ -221,9 +227,7 @@ pub fn run(
                         let default = if choices.contains(&current_val) { Some(current_val) } else { choices.first().cloned() };
                         let resp = widgets::menu::run(Some(term), item.label.clone(), String::new(),
                             Value::Array(choices.iter().map(|c| Value::String(c.clone())).collect()), default, None)?;
-                        if resp.cancelled {
-                            Ok(None)
-                        } else {
+                        if resp.cancelled { Ok(None) } else {
                             let name = resp.result.and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
                             let (title_code, accent_code) = match name.as_str() {
                                 "Forge (pink/blue)" => ("212", "34"),
@@ -257,34 +261,40 @@ pub fn run(
                             "KEYMAP" => get_keymaps(),
                             _ => item.choices.clone(),
                         };
-                        let resp = widgets::filter::run(
-                            Some(term),
-                            item.label.clone(),
-                            String::new(),
-                            choices,
-                            Some(item.placeholder.clone()),
-                        )?;
-                        if resp.cancelled {
-                            Ok(None)
-                        } else {
-                            Ok(resp.result.and_then(|v| v.as_str().map(String::from)))
-                        }
+                        let resp = widgets::filter::run(Some(term), item.label.clone(), String::new(),
+                            choices, Some(item.placeholder.clone()))?;
+                        if resp.cancelled { Ok(None) } else { Ok(resp.result.and_then(|v| v.as_str().map(String::from))) }
                     }
                     "yesno" => {
-                        let default_yes = current_val == "yes";
-                        let resp = widgets::yesno::run(Some(term), item.label.clone(), String::new(), Some(default_yes))?;
+                        let default_val = current_val == "yes";
+                        let resp = widgets::yesno::run(Some(term), item.label.clone(), item.label.clone(), Some(default_val))?;
                         if resp.cancelled { Ok(None) } else {
                             Ok(resp.result.and_then(|v| v.as_bool()).map(|b| if b { "yes".to_string() } else { "no".to_string() }))
                         }
                     }
                     "password" => {
-                        let resp = widgets::password::run(Some(term), item.label.clone(), String::new(),
-                            Some(if current_val.is_empty() { "Enter password".into() } else { "".into() }))?;
-                        if resp.cancelled { Ok(None) } else { Ok(resp.result.and_then(|v| v.as_str().map(String::from))) }
+                        if item.id == "ROOT_PASS" {
+                            let pass1 = widgets::password::run(Some(term), "Root Password".into(), "Enter root password:".into(), None)?;
+                            if pass1.cancelled { return Ok(None); }
+                            let pass2 = widgets::password::run(Some(term), "Root Password".into(), "Confirm password:".into(), None)?;
+                            if pass2.cancelled { return Ok(None); }
+                            let p1 = pass1.result.and_then(|v| v.as_str().map(String::from));
+                            let p2 = pass2.result.and_then(|v| v.as_str().map(String::from));
+                            if p1 == p2 { Ok(p1) } else { Ok(None) }
+                        } else {
+                            let resp = widgets::password::run(Some(term), item.label.clone(), String::new(),
+                                Some(if current_val.is_empty() { "Enter password".into() } else { "".into() }))?;
+                            if resp.cancelled { Ok(None) } else { Ok(resp.result.and_then(|v| v.as_str().map(String::from))) }
+                        }
                     }
                     "multiselect" => {
+                        let choices: Vec<String> = if item.id == "EXTRAS" {
+                            get_extras_choices()
+                        } else {
+                            item.choices.clone()
+                        };
                         let resp = widgets::multiselect::run(Some(term), item.label.clone(), String::new(),
-                            item.choices.clone(), Some("Search...".into()), None, None)?;
+                            choices, Some("Search...".into()), None, None)?;
                         if resp.cancelled { Ok(None) } else {
                             Ok(resp.result.and_then(|v| v.as_array().cloned())
                                 .map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(" ")))
@@ -293,14 +303,24 @@ pub fn run(
                     _ => Ok(None),
                 };
                 if let Ok(Some(new_val)) = result {
-                    state.values.insert(item.id.clone(), new_val);
+                    let item_id = item.id.clone();
+                    state.values.insert(item_id.clone(), new_val.clone());
+                    if item_id == "USE_LUKS" && new_val == "yes" {
+                        let pass_resp = widgets::password::run(Some(term), "LUKS Passphrase".into(), "Enter passphrase:".into(), None)?;
+                        if !pass_resp.cancelled {
+                            if let Some(pass) = pass_resp.result.and_then(|v| v.as_str().map(String::from)) {
+                                state.values.insert("LUKS_PASS".to_string(), pass);
+                                let kf_resp = widgets::yesno::run(Some(term), "LUKS Keyfile".into(), "Use a keyfile to avoid typing your password twice at boot?".into(), Some(false))?;
+                                state.values.insert("LUKS_KEYFILE".to_string(), if kf_resp.result.and_then(|v| v.as_bool()).unwrap_or(false) { "yes".to_string() } else { "no".to_string() });
+                            }
+                        }
+                    }
                 }
             }
             state.mode = HubMode::Browsing;
             continue;
         }
 
-        // Confirm proceed dialog
         if state.mode == HubMode::ConfirmProceed {
             if let Event::Key(key) = event::read()? {
                 match key.code {
@@ -340,10 +360,11 @@ pub fn run(
                     if action == "Proceed" {
                         state.mode = HubMode::ConfirmProceed;
                     } else {
-                        let map: serde_json::Map<String, Value> = state.values.iter()
+                        let mut map: serde_json::Map<String, Value> = state.values.iter()
                             .filter(|(k, _)| !k.is_empty())
                             .map(|(k, v)| (k.clone(), Value::String(v.clone())))
                             .collect();
+                        map.insert("_action".to_string(), Value::String(action.clone()));
                         break Response { result: Some(Value::Object(map)), cancelled: false, error: None };
                     }
                 }
@@ -411,6 +432,15 @@ fn get_keymaps() -> Vec<String> {
     std::process::Command::new("sh")
         .arg("-c")
         .arg("localectl list-keymaps 2>/dev/null || find /usr/share/kbd/keymaps -name '*.map.gz' 2>/dev/null | sed 's|.*/||; s|\\.map\\.gz||' | sort -u")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().map(|l| l.to_string()).collect())
+        .unwrap_or_default()
+}
+
+fn get_extras_choices() -> Vec<String> {
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg("pacman -Sl world galaxy 2>/dev/null | awk '{print $2}' | sort -u")
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).lines().map(|l| l.to_string()).collect())
         .unwrap_or_default()
