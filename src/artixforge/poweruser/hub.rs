@@ -229,8 +229,8 @@ pub fn run(
                         }
                     }
                     "kernel_config" => {
-                        let resp = crate::artixforge::poweruser::kernel::run(term, &state.values)?;
-                        Ok(Some(resp))
+                        crate::artixforge::poweruser::kernel::run(term, &mut state.values)?;
+                        Ok(None)
                     }
                     "recipe_sections" => {
                         let sections = vec!["OFFICIAL/Base","OFFICIAL/Other","COMMUNITY/Base","COMMUNITY/Other"];
