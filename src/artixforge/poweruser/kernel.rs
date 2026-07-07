@@ -69,6 +69,12 @@ pub fn run(
                 )?;
                 if !resp.cancelled {
                     let new_val = resp.result.and_then(|v| v.as_str().map(String::from)).unwrap_or(current_depth.clone());
+                    if new_val == "menuconfig" {
+                        let config_path = "/mnt/artix-poweruser/work/linux-custom/src/.config";
+                        if std::path::Path::new(config_path).exists() {
+                            crate::artixforge::poweruser::kconfig::run(term, config_path)?;
+                        }
+                    }
                     values.insert("KERNEL_CONFIG_DEPTH".into(), new_val);
                 }
             }
