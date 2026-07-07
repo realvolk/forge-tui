@@ -285,6 +285,12 @@ pub fn run(
                                     if p1 == p2 { Ok(p1) } else { Ok(None) }
                                 }
                             }
+                        } else {
+                            let resp = widgets::password::run(Some(term), item.label.clone(), String::new(),
+                                Some(if current_val.is_empty() { "Enter password".into() } else { "".into() }))?;
+                            if resp.cancelled { Ok(None) } else { Ok(resp.result.and_then(|v| v.as_str().map(String::from))) }
+                        }
+                    }
                     "multiselect" => {
                         let choices: Vec<String> = if item.id == "EXTRAS" {
                             get_extras_choices()
