@@ -332,6 +332,7 @@ pub fn run(
         if state.mode == HubMode::EditingItem {
             if let Some(item) = visible_items.get(state.item_idx).cloned() {
                 let current_val = state.values.get(&item.id).cloned().unwrap_or_default();
+                let item_id = item.id.clone();
                 let result = match item.widget.as_str() {
                     "kernel_picker" => crate::artixforge::install::kernel::run_with_values(
                         term,
@@ -340,7 +341,7 @@ pub fn run(
                     )
                     .map(|v| Some(v)),
                     "user_manager" => crate::artixforge::install::users::run(term, &current_val),
-                    "menu" if item.id == "GUM_TITLE_COLOR" => {
+                    "menu" if item_id == "GUM_TITLE_COLOR" => {
                         let choices = item.choices.clone();
                         let default = if choices.contains(&current_val) {
                             Some(current_val)
@@ -368,7 +369,7 @@ pub fn run(
                                 .and_then(|v| v.as_str().map(String::from))
                                 .unwrap_or_default();
                             let (title_code, accent_code) = match name.as_str() {
-                                "Forge (pink/blue)" => ("212", "34"),
+                                "Forge (pink/green)" => ("212", "34"),
                                 "Artix (blue)" => ("39", "117"),
                                 "Jet Black (grey)" => ("245", "250"),
                                 "Mono (white)" => ("250", "255"),
@@ -438,7 +439,7 @@ pub fn run(
                         }
                     }
                     "filter" => {
-                        let choices: Vec<String> = match item.id.as_str() {
+                        let choices: Vec<String> = match item_id.as_str() {
                             "TIMEZONE" => get_timezones(),
                             "LOCALE" => get_locales(),
                             "KEYMAP" => get_keymaps(),
@@ -461,7 +462,7 @@ pub fn run(
                     }
                     "yesno" => {
                         let default_val = current_val == "yes";
-                        let msg = match item.id.as_str() {
+                        let msg = match item_id.as_str() {
                             "SWAP_ENABLED" => "Create a swap partition?\n\nSwap provides virtual memory and hibernation support."
                                 .to_string(),
                             "USE_LUKS" => "Encrypt the entire disk with LUKS?\n\nYou will need to enter a passphrase at boot."
@@ -501,7 +502,7 @@ pub fn run(
                         }
                     }
                     "password" => {
-                        if item.id == "ROOT_PASS" {
+                        if item_id == "ROOT_PASS" {
                             let bg_fn: &dyn Fn(&mut Frame) = &|f| render_data.render(f);
                             let pass1 = widgets::password::run_with_background(
                                 Some(term),
@@ -560,7 +561,7 @@ pub fn run(
                         }
                     }
                     "multiselect" => {
-                        let choices: Vec<String> = if item.id == "EXTRAS" {
+                        let choices: Vec<String> = if item_id == "EXTRAS" {
                             get_extras_choices()
                         } else {
                             item.choices.clone()
@@ -587,10 +588,11 @@ pub fn run(
                     }
                     _ => Ok(None),
                 };
+
                 if let Ok(Some(new_val)) = result {
-                    let item_id = item.id.clone();
                     state.values.insert(item_id.clone(), new_val.clone());
-                    if item_id == "USE_LUKS" && new_val == "yes" {
+
+                    if item_id == "USE_LUKS" {
                         let bg_fn: &dyn Fn(&mut Frame) = &|f| render_data.render(f);
                         let pass1 = widgets::password::run_with_background(
                             Some(term),
@@ -718,7 +720,9 @@ pub fn run(
                     if action == "Proceed" {
                         state.mode = HubMode::ConfirmProceed;
                     } else if action == "Quick Profile" {
-                        if let Ok(Some(profile_state)) = crate::artixforge::install::quick_profiles::run(term) {
+                        if let Ok(Some(profile_state)) =
+                            crate::artixforge::install::quick_profiles::run(term)
+                        {
                             for (k, v) in profile_state {
                                 state.values.insert(k, v);
                             }
