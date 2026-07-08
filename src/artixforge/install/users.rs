@@ -275,9 +275,16 @@ pub fn run(
                     match key.code {
                         KeyCode::Esc => { mode = UserMode::List; }
                         KeyCode::Char('s') => {
+                            let pass = if edit_pass.is_empty() && !is_new {
+                                users[*idx].pass.clone()
+                            } else if edit_pass.starts_with("$6$") {
+                                edit_pass.clone()
+                            } else {
+                                hash_password(&edit_pass)
+                            };
                             let user = User {
                                 name: edit_name.clone(),
-                                pass: if edit_pass.starts_with("$6$") { edit_pass.clone() } else { hash_password(&edit_pass) },
+                                pass,
                                 shell: shells[edit_shell_idx].clone(),
                                 groups: edit_groups
                                     .iter()
