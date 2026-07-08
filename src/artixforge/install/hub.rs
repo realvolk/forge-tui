@@ -562,7 +562,9 @@ pub fn run(
                     }
                     "multiselect" => {
                         let choices: Vec<String> = if item_id == "EXTRAS" {
-                            get_extras_choices()
+                            let c = get_extras_choices();
+                            let _ = std::fs::write("/tmp/extras-choices.txt", c.join("\n"));
+                            c
                         } else {
                             item.choices.clone()
                         };
