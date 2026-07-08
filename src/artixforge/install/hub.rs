@@ -843,15 +843,22 @@ fn get_keymaps() -> Vec<String> {
 }
 
 fn get_extras_choices() -> Vec<String> {
-    std::process::Command::new("sh")
-        .arg("-c")
-        .arg("pacman -Sl world galaxy 2>/dev/null | awk '{print $2}' | sort -u")
-        .output()
-        .map(|o| {
-            String::from_utf8_lossy(&o.stdout)
+    let output = std::process::Command::new("pacman")
+        .args(&["-Sl", "world", "galaxy"])
+        .output();
+    
+    match output {
+        Ok(o) => {
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            let mut packages: Vec<String> = stdout
                 .lines()
-                .map(|l| l.to_string())
-                .collect()
-        })
-        .unwrap_or_default()
+                .filter_map(|line| line.split_whitespace().nth(1))
+                .map(|s| s.to_string())
+                .collect();
+            packages.sort();
+            packages.dedup();
+            packages
+        }
+        Err(_) => vec![]
+    }
 }
