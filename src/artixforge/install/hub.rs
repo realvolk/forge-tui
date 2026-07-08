@@ -634,8 +634,7 @@ pub fn run(
                                     .and_then(|v| v.as_str().map(String::from));
                                 if p1 == p2 {
                                     if let Some(pass) = p1 {
-                                        let hashed = hash_password(&pass);
-                                        state.values.insert("LUKS_PASS".to_string(), hashed);
+                                        state.values.insert("LUKS_PASS".to_string(), pass);
                                         let bg_fn3: &dyn Fn(&mut Frame) = &|f| render_data.render(f);
                                         let kf_resp = widgets::yesno::run_with_background(
                                             Some(term),
