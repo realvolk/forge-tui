@@ -102,23 +102,13 @@ pub fn run(
                             break Response { result: Some(serde_json::Value::Array(rc.into_iter().map(serde_json::Value::String).collect())), cancelled: false, error: None };
                         }
                     }
-                    KeyCode::Up | KeyCode::Char('k') => {
-                        if query.is_empty() {
-                            let i = list_state.selected().unwrap_or(0);
-                            if i > 0 { list_state.select(Some(i - 1)); }
-                        } else {
-                            query.push('k');
-                            list_state.select(Some(0));
-                        }
+                    KeyCode::Up => {
+                        let i = list_state.selected().unwrap_or(0);
+                        if i > 0 { list_state.select(Some(i - 1)); }
                     }
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        if query.is_empty() {
-                            let i = list_state.selected().unwrap_or(0);
-                            if i < filtered.len().saturating_sub(1) { list_state.select(Some(i + 1)); }
-                        } else {
-                            query.push('j');
-                            list_state.select(Some(0));
-                        }
+                    KeyCode::Down => {
+                        let i = list_state.selected().unwrap_or(0);
+                        if i < filtered.len().saturating_sub(1) { list_state.select(Some(i + 1)); }
                     }
                     KeyCode::Char(' ') => {
                         if let Some(sel) = list_state.selected() {
