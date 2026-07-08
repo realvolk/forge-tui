@@ -419,13 +419,15 @@ pub fn run(
                         }
                     }
                     "input" => {
-                        let resp = widgets::input::run(
+                        let bg_fn: &dyn Fn(&mut Frame) = &|f| render_data.render(f);
+                        let resp = widgets::input::run_with_background(
                             Some(term),
                             item.label.clone(),
                             String::new(),
                             Some(current_val),
                             Some(item.placeholder.clone()),
                             None,
+                            Some(bg_fn),
                         )?;
                         if resp.cancelled {
                             Ok(None)
@@ -590,40 +592,55 @@ pub fn run(
                     state.values.insert(item_id.clone(), new_val.clone());
                     if item_id == "USE_LUKS" && new_val == "yes" {
                         let bg_fn: &dyn Fn(&mut Frame) = &|f| render_data.render(f);
-                        let pass_resp = widgets::password::run_with_background(
+                        let pass1 = widgets::password::run_with_background(
                             Some(term),
                             "LUKS Passphrase".into(),
                             "Enter passphrase:".into(),
                             None,
                             Some(bg_fn),
                         )?;
-                        if !pass_resp.cancelled {
-                            if let Some(pass) = pass_resp
-                                .result
-                                .and_then(|v| v.as_str().map(String::from))
-                            {
-                                state.values.insert("LUKS_PASS".to_string(), pass);
-                                let bg_fn2: &dyn Fn(&mut Frame) = &|f| render_data.render(f);
-                                let kf_resp = widgets::yesno::run_with_background(
-                                    Some(term),
-                                    "LUKS Keyfile".into(),
-                                    "Use a keyfile to avoid typing your password twice at boot?"
-                                        .into(),
-                                    Some(false),
-                                    Some(bg_fn2),
-                                )?;
-                                state.values.insert(
-                                    "LUKS_KEYFILE".to_string(),
-                                    if kf_resp
-                                        .result
-                                        .and_then(|v| v.as_bool())
-                                        .unwrap_or(false)
-                                    {
-                                        "yes".to_string()
-                                    } else {
-                                        "no".to_string()
-                                    },
-                                );
+                        if !pass1.cancelled {
+                            let bg_fn2: &dyn Fn(&mut Frame) = &|f| render_data.render(f);
+                            let pass2 = widgets::password::run_with_background(
+                                Some(term),
+                                "LUKS Passphrase".into(),
+                                "Confirm passphrase:".into(),
+                                None,
+                                Some(bg_fn2),
+                            )?;
+                            if !pass2.cancelled {
+                                let p1 = pass1
+                                    .result
+                                    .and_then(|v| v.as_str().map(String::from));
+                                let p2 = pass2
+                                    .result
+                                    .and_then(|v| v.as_str().map(String::from));
+                                if p1 == p2 {
+                                    if let Some(pass) = p1 {
+                                        state.values.insert("LUKS_PASS".to_string(), pass);
+                                        let bg_fn3: &dyn Fn(&mut Frame) = &|f| render_data.render(f);
+                                        let kf_resp = widgets::yesno::run_with_background(
+                                            Some(term),
+                                            "LUKS Keyfile".into(),
+                                            "Use a keyfile to avoid typing your password twice at boot?"
+                                                .into(),
+                                            Some(false),
+                                            Some(bg_fn3),
+                                        )?;
+                                        state.values.insert(
+                                            "LUKS_KEYFILE".to_string(),
+                                            if kf_resp
+                                                .result
+                                                .and_then(|v| v.as_bool())
+                                                .unwrap_or(false)
+                                            {
+                                                "yes".to_string()
+                                            } else {
+                                                "no".to_string()
+                                            },
+                                        );
+                                    }
+                                }
                             }
                         }
                     }
@@ -700,6 +717,12 @@ pub fn run(
                     let action = &actions[f as usize - 1];
                     if action == "Proceed" {
                         state.mode = HubMode::ConfirmProceed;
+                    } else if action == "Quick Profile" {
+                        if let Ok(Some(profile_state)) = crate::artixforge::install::quick_profiles::run(term) {
+                            for (k, v) in profile_state {
+                                state.values.insert(k, v);
+                            }
+                        }
                     } else {
                         let mut map: serde_json::Map<String, Value> = state
                             .values

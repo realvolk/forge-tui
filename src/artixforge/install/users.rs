@@ -11,6 +11,7 @@ use ratatui::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::fs::File;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +61,10 @@ pub fn run(
         "lp".into(), "network".into(), "optical".into(), "scanner".into(),
         "users".into(),
     ];
+    let default_group_set: HashSet<&str> = ["wheel", "audio", "video", "storage", "network", "users"]
+        .iter()
+        .cloned()
+        .collect();
 
     let _result = loop {
         term.draw(|f: &mut Frame| {
@@ -218,7 +223,7 @@ pub fn run(
                             edit_name = String::new();
                             edit_pass = String::new();
                             edit_shell_idx = 0;
-                            edit_groups = vec![false; all_groups.len()];
+                            edit_groups = all_groups.iter().map(|g| default_group_set.contains(g.as_str())).collect();
                             edit_sudo = true;
                             edit_field = 0;
                             mode = UserMode::AddEdit(users.len());
@@ -284,12 +289,22 @@ pub fn run(
                                     }
                                 }
                                 1 => {
-                                    let resp = widgets::password::run(
+                                    let pass1 = widgets::password::run(
                                         Some(term), "Password".into(), String::new(),
                                         Some("Enter password".into()),
                                     )?;
-                                    if !resp.cancelled {
-                                        edit_pass = resp.result.and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
+                                    if !pass1.cancelled {
+                                        let pass2 = widgets::password::run(
+                                            Some(term), "Password".into(), String::new(),
+                                            Some("Confirm password".into()),
+                                        )?;
+                                        if !pass2.cancelled {
+                                            let p1 = pass1.result.and_then(|v| v.as_str().map(String::from));
+                                            let p2 = pass2.result.and_then(|v| v.as_str().map(String::from));
+                                            if p1 == p2 {
+                                                edit_pass = p1.unwrap_or_default();
+                                            }
+                                        }
                                     }
                                 }
                                 2 => {
