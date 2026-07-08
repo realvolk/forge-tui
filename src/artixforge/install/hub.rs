@@ -680,6 +680,10 @@ pub fn run(
             if resp.cancelled {
                 state.mode = HubMode::Browsing;
             } else if resp.result.and_then(|v| v.as_bool()).unwrap_or(false) {
+                if let Some(disk) = state.values.get("DISK") {
+                    let short_disk = disk.split_whitespace().next().unwrap_or(disk).to_string();
+                    state.values.insert("DISK".to_string(), short_disk);
+                }
                 let map: serde_json::Map<String, Value> = state
                     .values
                     .iter()
