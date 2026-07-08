@@ -24,6 +24,31 @@ struct DaemonRequest {
 }
 
 pub fn run(listener: UnixListener) -> Result<()> {
+    std::panic::set_hook(Box::new(|info| {
+        let payload = info.payload();
+        let msg = if let Some(s) = payload.downcast_ref::<String>() {
+            s.clone()
+        } else if let Some(s) = payload.downcast_ref::<&str>() {
+            s.to_string()
+        } else {
+            "unknown panic payload".to_string()
+        };
+        let location = info
+            .location()
+            .map(|loc| format!("{}:{}:{}", loc.file(), loc.line(), loc.column()))
+            .unwrap_or_else(|| "unknown location".to_string());
+        let full_msg = format!("PANIC at {}: {}", location, msg);
+
+        let _ = std::fs::write("/tmp/forge-tui-panic.log", &full_msg);
+        let _ = crossterm::execute!(
+            io::stdout(),
+            crossterm::cursor::Show,
+            crossterm::terminal::LeaveAlternateScreen
+        );
+        let _ = crossterm::terminal::disable_raw_mode();
+        eprintln!("{}", full_msg);
+    }));
+
     let stdout = crate::tty::open()?;
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
@@ -135,13 +160,29 @@ pub fn run(listener: UnixListener) -> Result<()> {
         let (title, step, total) = get_breadcrumb(&daemon_req.request);
         breadcrumb = Some((title, step, total));
 
-        let response = match widgets::dispatch(daemon_req.request, Some(&mut terminal)) {
-            Ok(resp) => resp,
-            Err(e) => Response {
+        let response = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            widgets::dispatch(daemon_req.request, Some(&mut terminal))
+        })) {
+            Ok(Ok(resp)) => resp,
+            Ok(Err(e)) => Response {
                 result: None,
                 cancelled: true,
                 error: Some(format!("{}", e)),
             },
+            Err(panic_payload) => {
+                let msg = if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else {
+                    "unknown panic".to_string()
+                };
+                Response {
+                    result: None,
+                    cancelled: true,
+                    error: Some(format!("PANIC: {}", msg)),
+                }
+            }
         };
 
         let _ = daemon_req.response_tx.send(response);
