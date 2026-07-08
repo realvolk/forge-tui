@@ -17,6 +17,21 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io;
 
+fn hash_password(password: &str) -> String {
+    if password.is_empty() {
+        return String::new();
+    }
+    std::process::Command::new("openssl")
+        .args(&["passwd", "-6", "--", password])
+        .output()
+        .ok()
+        .and_then(|o| {
+            let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if s.is_empty() { None } else { Some(s) }
+        })
+        .unwrap_or_default()
+}
+
 #[derive(Debug, Clone)]
 struct HubItem {
     id: String,
@@ -532,7 +547,7 @@ pub fn run(
                                         .result
                                         .and_then(|v| v.as_str().map(String::from));
                                     if p1 == p2 {
-                                        Ok(p1)
+                                        Ok(p1.map(|p| hash_password(&p)))
                                     } else {
                                         Ok(None)
                                     }
@@ -562,9 +577,7 @@ pub fn run(
                     }
                     "multiselect" => {
                         let choices: Vec<String> = if item_id == "EXTRAS" {
-                            let c = get_extras_choices();
-                            let _ = std::fs::write("/tmp/extras-choices.txt", c.join("\n"));
-                            c
+                            get_extras_choices()
                         } else {
                             item.choices.clone()
                         };
@@ -621,7 +634,8 @@ pub fn run(
                                     .and_then(|v| v.as_str().map(String::from));
                                 if p1 == p2 {
                                     if let Some(pass) = p1 {
-                                        state.values.insert("LUKS_PASS".to_string(), pass);
+                                        let hashed = hash_password(&pass);
+                                        state.values.insert("LUKS_PASS".to_string(), hashed);
                                         let bg_fn3: &dyn Fn(&mut Frame) = &|f| render_data.render(f);
                                         let kf_resp = widgets::yesno::run_with_background(
                                             Some(term),

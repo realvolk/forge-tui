@@ -14,6 +14,21 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::fs::File;
 
+fn hash_password(password: &str) -> String {
+    if password.is_empty() {
+        return String::new();
+    }
+    std::process::Command::new("openssl")
+        .args(&["passwd", "-6", "--", password])
+        .output()
+        .ok()
+        .and_then(|o| {
+            let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if s.is_empty() { None } else { Some(s) }
+        })
+        .unwrap_or_default()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct User {
     name: String,
@@ -148,7 +163,7 @@ pub fn run(
                     let field_names = vec!["Name", "Password", "Shell", "Groups", "Sudo"];
                     let field_values: Vec<String> = vec![
                         if is_new { edit_name.clone() } else { user.name.clone() },
-                        "••••".to_string(),
+                        if user.pass.is_empty() { "not set".to_string() } else { "••••".to_string() },
                         if is_new { shells[edit_shell_idx].clone() } else { user.shell.clone() },
                         if is_new {
                             edit_groups
@@ -262,7 +277,7 @@ pub fn run(
                         KeyCode::Char('s') => {
                             let user = User {
                                 name: edit_name.clone(),
-                                pass: edit_pass.clone(),
+                                pass: if edit_pass.starts_with("$6$") { edit_pass.clone() } else { hash_password(&edit_pass) },
                                 shell: shells[edit_shell_idx].clone(),
                                 groups: edit_groups
                                     .iter()
