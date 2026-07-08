@@ -762,7 +762,18 @@ pub fn run(
 fn render_summary(template: &str, values: &HashMap<String, String>) -> String {
     let mut result = template.to_string();
     for (key, value) in values {
-        result = result.replace(&format!("{{{}}}", key), value);
+        if key == "USER_COUNT" {
+            let count = if value == "0" || value.is_empty() {
+                0
+            } else if let Ok(users) = serde_json::from_str::<Vec<serde_json::Value>>(value) {
+                users.len()
+            } else {
+                0
+            };
+            result = result.replace(&format!("{{{}}}", key), &count.to_string());
+        } else {
+            result = result.replace(&format!("{{{}}}", key), value);
+        }
     }
     result
 }
